@@ -1,0 +1,21 @@
+{
+  "schema": "1.0",
+  "type": "whmcs-servers",
+  "name": "vpnhoodpartner",
+  "license": "free",
+  "category": "digitalservices",
+  "description": {
+    "name": "VpnHood Partner Connector",
+    "tagline": "Resell VpnHood keys from your own WHMCS by provisioning through your provider's VpnHood Partner Hub using your prepaid credit.",
+    "long": ""
+  },
+  "support": {
+    "docs_url": "https://vpnhood.com"
+  },
+  "authors": [
+    {
+      "name": "VpnHood!",
+      "homepage": "https:\/\/www.vpnhood.com\/"
+    }
+  ]
+}
