@@ -17,10 +17,15 @@ class HubClient
     private string $endpoint;
     private string $apiKey;
     private string $apiSecret;
+    private bool $insecure;
 
     private const API_PATH = '/modules/addons/vpnhoodpartnerhub/api.php';
 
-    public function __construct(string $baseUrl, string $apiKey, string $apiSecret, bool $secure = true)
+    /**
+     * @param bool $secure   When the base URL has no scheme, choose https (true) or http (false).
+     * @param bool $insecure DEV ONLY: skip TLS certificate verification (self-signed/loopback Hub).
+     */
+    public function __construct(string $baseUrl, string $apiKey, string $apiSecret, bool $secure = true, bool $insecure = false)
     {
         $base = rtrim(trim($baseUrl), '/');
         // Accept either a bare host or a full URL; normalize to a scheme.
@@ -30,20 +35,27 @@ class HubClient
         $this->endpoint = $base . self::API_PATH;
         $this->apiKey = $apiKey;
         $this->apiSecret = $apiSecret;
+        $this->insecure = $insecure;
     }
 
     /**
      * Build a HubClient from WHMCS server module $params.
+     *
+     * Dev/testing: put the literal token "insecure" in the server's "Access Hash"
+     * field to skip TLS verification (e.g. a single-box test where the Hub uses a
+     * self-signed cert or a loopback call). Never use this in production.
      */
     public static function fromParams(array $params): HubClient
     {
         $host = $params['serverhostname'] ?: ($params['serverip'] ?? '');
         $secure = !empty($params['serversecure']);
+        $insecure = stripos((string) ($params['serveraccesshash'] ?? ''), 'insecure') !== false;
         return new HubClient(
             (string) $host,
             (string) ($params['serverusername'] ?? ''),
             (string) ($params['serverpassword'] ?? ''),
-            $secure
+            $secure,
+            $insecure
         );
     }
 
@@ -67,6 +79,12 @@ class HubClient
             'X-Vpnhood-Secret: ' . $this->apiSecret,
         ]);
         curl_setopt($ch, CURLOPT_TIMEOUT, 60);
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 15);
+        if ($this->insecure) {
+            // DEV ONLY: accept self-signed / loopback Hub certificates.
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 0);
+        }
 
         $response = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
