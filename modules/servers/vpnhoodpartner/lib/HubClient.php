@@ -39,22 +39,39 @@ class HubClient
     }
 
     /**
-     * Build a HubClient from WHMCS server module $params.
+     * Build a HubClient from the global connection settings stored by the
+     * `vpnhoodpartnerconfig` addon (System Settings → Addon Modules).
      *
-     * Dev/testing: put the literal token "insecure" in the server's "Access Hash"
-     * field to skip TLS verification (e.g. a single-box test where the Hub uses a
-     * self-signed cert or a loopback call). Never use this in production.
+     * Dev/testing: enable "Skip TLS Verification" in that addon to accept
+     * self-signed / loopback Hub certificates. Never use this in production.
+     *
+     * @throws Exception when the Hub URL has not been configured.
      */
-    public static function fromParams(array $params): HubClient
+    public static function fromConfig(): HubClient
     {
-        $host = $params['serverhostname'] ?: ($params['serverip'] ?? '');
-        $secure = !empty($params['serversecure']);
-        $insecure = stripos((string) ($params['serveraccesshash'] ?? ''), 'insecure') !== false;
+        $settings = \WHMCS\Database\Capsule::table('tbladdonmodules')
+            ->where('module', 'vpnhoodpartnerconfig')
+            ->pluck('value', 'setting');
+
+        $url = trim((string) ($settings['HubUrl'] ?? ''));
+        if ($url === '') {
+            throw new Exception(
+                'VpnHood Partner Hub is not configured. Set the Hub URL, API Key and API Secret in '
+                . 'System Settings → Addon Modules → VpnHood Partner Connector Configuration.'
+            );
+        }
+
+        $insecure = in_array(
+            strtolower((string) ($settings['SkipTlsVerify'] ?? '')),
+            ['on', 'yes', '1'],
+            true
+        );
+
         return new HubClient(
-            (string) $host,
-            (string) ($params['serverusername'] ?? ''),
-            (string) ($params['serverpassword'] ?? ''),
-            $secure,
+            $url,
+            (string) ($settings['ApiKey'] ?? ''),
+            (string) ($settings['ApiSecret'] ?? ''),
+            true,
             $insecure
         );
     }

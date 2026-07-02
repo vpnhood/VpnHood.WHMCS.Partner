@@ -22,31 +22,32 @@ Your provider will give you:
 
 1. **Hub URL** – the address of their WHMCS (e.g. `https://store.yourprovider.com`).
 2. **API Key** and **API Secret** – your partner credentials.
-3. One or more **Upstream Product References** (e.g. `vpn-monthly`) — the products you
-   are allowed to sell.
+3. One or more **products** mapped to your account — you pick these from a dropdown when
+   setting up your own products (no need to copy any reference by hand).
 4. A **prepaid credit balance** on your account with them.
 
 ## Installation
 
-1. Copy `modules/servers/vpnhoodpartner/` into your WHMCS `/modules/servers/` directory.
-2. In WHMCS Admin go to **System Settings → Products/Services → Servers → Add New Server**:
-   - **Hostname**: your provider's Hub URL (e.g. `store.yourprovider.com`).
-   - **Secure (SSL)**: enabled.
-   - **Username**: your **API Key**.
-   - **Password**: your **API Secret**.
-   - **Module**: select **VpnHood Partner Connector**.
-   - Click **Test Connection** is not required; save the server.
-3. (Recommended) Put this server into a **Server Group** for assignment.
+1. Copy `modules/servers/vpnhoodpartner/` into your WHMCS `/modules/servers/` directory and
+   `modules/addons/vpnhoodpartnerconfig/` into your WHMCS `/modules/addons/` directory.
+2. In WHMCS Admin go to **System Settings → Addon Modules**, activate **VpnHood Partner
+   Connector Configuration**, then click **Configure** and enter:
+   - **Hub URL**: your provider's Hub URL (e.g. `https://store.yourprovider.com`).
+   - **API Key**: your partner API Key.
+   - **API Secret**: your partner API Secret.
+
+That's the whole connection setup — there is **no WHMCS "Server" to configure**.
 
 ## Product setup
 
 1. Go to **System Settings → Products/Services** and create a product at *your* price.
 2. **Module Settings** tab:
    - **Module Name**: `VpnHood Partner Connector` (`vpnhoodpartner`).
-   - **Server Group**: the group containing your Hub server.
-   - **Upstream Product Reference**: the reference your provider assigned (e.g. `vpn-monthly`).
-3. Set your own pricing on the **Pricing** tab. Set the billing cycle to match the
-   upstream product's cycle.
+   - **Upstream Product**: pick from the dropdown — it lists exactly the products your
+     provider mapped to your account (each label shows its available billing cycles).
+3. Set your own pricing on the **Pricing** tab, matching the upstream product's cycle(s).
+   If you enable a billing cycle the upstream product does not offer, the Module Settings
+   tab shows a warning, and orders on that cycle are rejected at purchase time.
 
 ## How it works
 
@@ -59,12 +60,12 @@ Your provider will give you:
 | Terminate / Cancel | `terminate` → expires the upstream key |
 
 The delivered access code is shown to your customer in their **client area** for the
-service. (Bulk/CSV products show a CSV download instead.)
+service.
 
 ## Troubleshooting
 
-- **"Connection to VpnHood Partner Hub failed"** – check the server Hostname/SSL and that
-  the Hub URL is reachable.
+- **"Connection to VpnHood Partner Hub failed"** – check the **Hub URL** in the addon
+  configuration and that it is reachable over HTTPS.
 - **"Invalid API credentials" / "suspended"** – verify your API Key/Secret and that your
   partner account is active with your provider.
 - **"Insufficient credit"** – top up your prepaid balance with your provider.
