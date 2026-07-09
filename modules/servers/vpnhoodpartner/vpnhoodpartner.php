@@ -73,27 +73,20 @@ function vpnhoodpartner_ConfigOptions(array $params = []): array
             $options[$ref] = $label;
         }
 
-        $fields = [
-            'downstreamRef' => [
-                'FriendlyName' => 'Upstream Product',
-                'Type'         => 'dropdown',
-                'Options'      => $options,
-                'Description'  => 'The product your provider mapped to your account.',
-                'Default'      => '',
-            ],
+        $field = [
+            'FriendlyName' => 'Upstream Product',
+            'Type'         => 'dropdown',
+            'Options'      => $options,
+            'Description'  => 'The product your provider mapped to your account.',
+            'Default'      => '',
         ];
 
-        // Config-time cycle-mismatch warning (best effort; needs a saved product + selection).
-        $warning = vpnhoodpartner_cycleWarning($params, $cyclesByRef);
-        if ($warning !== '') {
-            $fields['cycleWarning'] = [
-                'FriendlyName' => 'Billing Cycle Check',
-                'Type'         => 'none',
-                'Description'  => $warning,
-            ];
-        }
+        // Config-time billing-cycle check, folded into THIS field's description so it always
+        // renders (a separate 'none' field is not reliably shown by WHMCS). It reports its
+        // state in every case, so a missing banner is never silent/ambiguous.
+        $field['Description'] .= vpnhoodpartner_cycleNotice($params, $cyclesByRef);
 
-        return $fields;
+        return ['downstreamRef' => $field];
     } catch (Exception $e) {
         logModuleCall('vpnhoodpartner', __FUNCTION__, $params, $e->getMessage(), $e->getTraceAsString());
         return [
@@ -140,36 +133,57 @@ function vpnhoodpartner_productEnabledCycleMonths(int $productId): array
     return $months;
 }
 
-/**
- * Build a warning if the product has billing cycles the upstream product does not offer.
- * Returns '' when there is nothing to warn about (or not enough context to check).
- */
-function vpnhoodpartner_cycleWarning(array $params, array $cyclesByRef): string
+/** Render an alert box for the cycle notice. */
+function vpnhoodpartner_cycleAlert(string $level, string $html): string
 {
-    $pid = (int) ($params['pid'] ?? 0);
+    return "<div class='alert alert-{$level}' style='margin-top:8px;margin-bottom:0;'>" . $html . '</div>';
+}
+
+/**
+ * Config-time billing-cycle check. Unlike a plain warning, this reports its state in EVERY
+ * case so a missing banner is never ambiguous: it tells the admin whether the product id was
+ * found, whether a selection has been saved, and whether the cycles match or mismatch.
+ */
+function vpnhoodpartner_cycleNotice(array $params, array $cyclesByRef): string
+{
+    // WHMCS does not reliably pass 'pid' into _ConfigOptions on the product edit page;
+    // the product id is in the request there (configproducts.php?action=edit&id=X).
+    $pid = (int) ($params['pid'] ?? ($_REQUEST['id'] ?? 0));
     if ($pid <= 0) {
-        return '';
+        return vpnhoodpartner_cycleAlert('info', 'Cycle check: product id not available on this page yet.');
     }
 
     $savedRef = (string) \WHMCS\Database\Capsule::table('tblproducts')->where('id', $pid)->value('configoption1');
-    if ($savedRef === '' || !isset($cyclesByRef[$savedRef])) {
-        return '';
+    if ($savedRef === '') {
+        return vpnhoodpartner_cycleAlert('info', 'Cycle check: pick an upstream product and click <b>Save Changes</b> to validate.');
+    }
+    if (!isset($cyclesByRef[$savedRef])) {
+        return vpnhoodpartner_cycleAlert('info', 'Cycle check: the saved upstream product is no longer offered — re-select one.');
     }
 
     $available = $cyclesByRef[$savedRef];
     $enabled = vpnhoodpartner_productEnabledCycleMonths($pid);
+    if (!$enabled) {
+        return vpnhoodpartner_cycleAlert('info', 'Cycle check: no billing cycle is enabled on the <b>Pricing</b> tab yet.');
+    }
+
     $unsupported = array_values(array_diff($enabled, $available));
+    $okLabels = array_map('vpnhoodpartner_cycleLabel', $available);
     if (!$unsupported) {
-        return '';
+        return vpnhoodpartner_cycleAlert(
+            'success',
+            'Billing cycles match the upstream product (offers <b>' . htmlspecialchars(implode(', ', $okLabels)) . '</b>).'
+        );
     }
 
     $badLabels = array_map('vpnhoodpartner_cycleLabel', $unsupported);
-    $okLabels = array_map('vpnhoodpartner_cycleLabel', $available);
-    return "<div class='alert alert-warning' style='margin-bottom:0;'>This product has billing cycle(s) <b>"
-        . htmlspecialchars(implode(', ', $badLabels)) . '</b> enabled that the upstream product does not offer'
-        . ' (it offers <b>' . htmlspecialchars($okLabels ? implode(', ', $okLabels) : 'none') . '</b>).'
-        . ' Orders placed on the unsupported cycle(s) will be rejected. Align the <b>Pricing</b> tab with the'
-        . ' upstream cycles.</div>';
+    return vpnhoodpartner_cycleAlert(
+        'warning',
+        'This product has billing cycle(s) <b>' . htmlspecialchars(implode(', ', $badLabels))
+        . '</b> enabled that the upstream product does not offer (it offers <b>'
+        . htmlspecialchars(implode(', ', $okLabels)) . '</b>). Orders on the unsupported cycle(s) will be'
+        . ' rejected. Align the <b>Pricing</b> tab with the upstream cycles.'
+    );
 }
 
 /**

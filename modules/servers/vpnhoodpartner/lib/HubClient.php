@@ -70,10 +70,32 @@ class HubClient
         return new HubClient(
             $url,
             (string) ($settings['ApiKey'] ?? ''),
-            (string) ($settings['ApiSecret'] ?? ''),
+            self::decryptSetting((string) ($settings['ApiSecret'] ?? '')),
             true,
             $insecure
         );
+    }
+
+    /**
+     * Decrypt a WHMCS "password"-type addon setting. WHMCS encrypts such fields at rest, so
+     * the raw value read from tbladdonmodules is ciphertext; DecryptPassword returns the
+     * plaintext. Falls back to the raw value if decryption yields nothing (e.g. legacy
+     * plaintext storage), so the secret is never left encrypted-on-the-wire.
+     */
+    private static function decryptSetting(string $value): string
+    {
+        if ($value === '') {
+            return '';
+        }
+        try {
+            $result = localAPI('DecryptPassword', ['password2' => $value]);
+            if (!empty($result['password'])) {
+                return (string) $result['password'];
+            }
+        } catch (\Throwable $e) {
+            // Ignore and fall back to the raw value.
+        }
+        return $value;
     }
 
     /**
