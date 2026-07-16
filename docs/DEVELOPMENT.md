@@ -56,9 +56,23 @@ The API path `/modules/addons/vpnhoodpartnerhub/api.php` is appended automatical
 
 Product config option `configoption1` = **Upstream Product** (`downstreamRef`). It is a
 **dropdown** populated live from the Hub (`getProducts`), so the partner picks from exactly
-the products the provider mapped to their account. `_ConfigOptions` also renders a
-**billing-cycle warning** when the product's enabled Pricing cycles are not all offered by the
-selected upstream product — caught at config time, before any customer orders.
+the products the provider mapped to their account. `_ConfigOptions` also renders a config-time
+**compatibility check** (`vpnhoodpartner_cycleNotice`), caught before any customer orders:
+
+1. **Payment Type** — the partner product's WHMCS Payment Type (`tblproducts.paytype`:
+   `free`/`onetime`/`recurring`) must equal the upstream product's `paymentType`. This is
+   checked *first* because billing cycles only exist for recurring products — WHMCS stores a
+   one-time price in the `monthly` pricing column, which a pure cycle comparison would
+   misread as a phantom Monthly cycle.
+2. **Billing cycles** (recurring products only) — when both sides are `recurring`, the
+   product's enabled Pricing cycles must all be offered by the selected upstream product's
+   `availableCycles`; otherwise a warning is shown.
+3. **Allow Multiple Quantities** — with this Pricing-tab option WHMCS creates ONE service
+   with quantity N (paid N×), but the connector stores exactly one `upstreamServiceId` +
+   `accessCode` per service, so it cannot deliver N keys. The notice flags the option
+   (comparing against the upstream's `allowMultipleQuantities`, `null` on older Hubs), and
+   `_CreateAccount` rejects any service with quantity > 1. The Hub additionally rejects
+   `order` calls with `quantity > 1` unless the upstream product allows multiple quantities.
 
 ## Lifecycle → Hub action mapping
 
@@ -84,7 +98,7 @@ headers `X-Vpnhood-Key`, `X-Vpnhood-Secret`. Response envelope:
 | Action | Request params | `data` returned |
 |--------|----------------|-----------------|
 | `getBalance` | — | `clientId, balance, currency` |
-| `getProducts` | — | `products[] { downstreamRef, name, billingCycleMonths, availableCycles }` |
+| `getProducts` | — | `products[] { downstreamRef, name, paymentType, allowMultipleQuantities, billingCycleMonths, availableCycles }` |
 | `order` | `downstreamRef`, `billingCycle?`, `quantity?`, `customerReference?` | `keys[] { upstreamServiceId, orderId, deliveryType, accessCode|csv }` |
 | `renew` | `upstreamServiceId`, `nextDueDate?` | `status, nextDueDate` |
 | `suspend` / `unsuspend` / `terminate` / `cancel` | `upstreamServiceId` | `status` |
@@ -94,10 +108,17 @@ headers `X-Vpnhood-Key`, `X-Vpnhood-Secret`. Response envelope:
 > ⚠️ This table is the integration boundary. If you change it here, change it in the Hub
 > repo's addon `README.md` and `docs/ARCHITECTURE.md` in the same release, or partners break.
 
-`availableCycles` is a list of cycle lengths in months (e.g. `[1, 12]`). `billingCycle` is a
-WHMCS cycle name (`monthly`…`triennially`); the Hub validates it against the product's
-`availableCycles` and rejects an unsupported cycle (HTTP 422). The connector also warns about
-mismatches at config time from `_ConfigOptions`.
+`paymentType` is the upstream product's WHMCS Payment Type (`free`/`onetime`/`recurring`).
+When absent (a Hub build predating the field), the connector must NOT assume a value: it
+skips the Payment Type comparison with an "update the Hub" info notice and falls back to the
+cycle-only check. `availableCycles` is a list of cycle lengths in months (e.g. `[1, 12]`),
+meaningful only when `paymentType` is `recurring`. `billingCycle` is a WHMCS cycle name
+(`monthly`…`triennially`); the Hub validates it against the product's `availableCycles` and
+rejects an unsupported cycle (HTTP 422) — except for `onetime`/`free` products, where
+`billingCycle` is ignored (WHMCS reports such services' cycle as "One Time", not a cycle
+name) and the Hub places the order as `onetime`. The connector also warns at config time
+from `_ConfigOptions` about both a Payment Type mismatch and, for recurring products, an
+unsupported billing cycle.
 
 ## Stored service properties
 

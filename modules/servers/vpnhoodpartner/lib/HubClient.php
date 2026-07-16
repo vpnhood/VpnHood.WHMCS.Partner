@@ -77,10 +77,15 @@ class HubClient
     }
 
     /**
-     * Decrypt a WHMCS "password"-type addon setting. WHMCS encrypts such fields at rest, so
-     * the raw value read from tbladdonmodules is ciphertext; DecryptPassword returns the
-     * plaintext. Falls back to the raw value if decryption yields nothing (e.g. legacy
-     * plaintext storage), so the secret is never left encrypted-on-the-wire.
+     * Decrypt a WHMCS "password"-type addon setting, tolerating plaintext storage.
+     *
+     * Depending on the WHMCS version, addon password fields may be stored encrypted OR in
+     * plaintext. DecryptPassword does not fail on a value that was never encrypted — it
+     * reports success and returns BINARY GARBAGE. Sent as an HTTP header, those control
+     * bytes make the whole request malformed, which Cloudflare-fronted Hubs reject with a
+     * bare "400 (empty body)" that never reaches the Hub's PHP. So the decrypted value is
+     * only trusted when it is printable ASCII (a real key/secret always is); anything else
+     * means the stored value was already plaintext — use it as-is.
      */
     private static function decryptSetting(string $value): string
     {
@@ -89,8 +94,9 @@ class HubClient
         }
         try {
             $result = localAPI('DecryptPassword', ['password2' => $value]);
-            if (!empty($result['password'])) {
-                return (string) $result['password'];
+            $plain = (string) ($result['password'] ?? '');
+            if ($plain !== '' && !preg_match('/[^\x20-\x7E]/', $plain)) {
+                return $plain;
             }
         } catch (\Throwable $e) {
             // Ignore and fall back to the raw value.
@@ -105,6 +111,18 @@ class HubClient
      */
     public function call(string $action, array $params = []): array
     {
+        // A non-printable byte in a credential corrupts the whole HTTP request; a
+        // Cloudflare-fronted Hub then answers a bare "400 (empty body)" that is almost
+        // impossible to trace. Fail here with an actionable message instead.
+        foreach (['X-Vpnhood-Key' => $this->apiKey, 'X-Vpnhood-Secret' => $this->apiSecret] as $name => $credential) {
+            if (preg_match('/[^\x20-\x7E]/', $credential)) {
+                throw new Exception(
+                    $name . ' contains non-printable characters; re-save the API credentials in '
+                    . 'System Settings → Addon Modules → VpnHood Partner Connector Configuration.'
+                );
+            }
+        }
+
         $payload = json_encode(array_merge(['action' => $action], $params));
 
         $ch = curl_init($this->endpoint);
@@ -117,6 +135,10 @@ class HubClient
             'X-Vpnhood-Key: ' . $this->apiKey,
             'X-Vpnhood-Secret: ' . $this->apiSecret,
         ]);
+        // Identify the client. PHP cURL sends no User-Agent by default, and Cloudflare/WAFs
+        // in front of the Hub commonly reject an empty User-Agent with a bare 400/403 before
+        // the request ever reaches the Hub's PHP.
+        curl_setopt($ch, CURLOPT_USERAGENT, 'VpnHoodPartnerConnector/1.0 (+WHMCS)');
         curl_setopt($ch, CURLOPT_TIMEOUT, 60);
         curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 15);
         if ($this->insecure) {
@@ -137,7 +159,12 @@ class HubClient
 
         $decoded = json_decode($response, true);
         if (!is_array($decoded)) {
-            throw new Exception('Invalid response from Hub (HTTP ' . $httpCode . ').');
+            // Not the JSON envelope we expect — surface a snippet of the actual body so the
+            // cause is visible (an HTML error page, a WAF/proxy block, a PHP error, or empty
+            // body all otherwise look identical from a bare status code).
+            throw new Exception(
+                'Invalid response from Hub (HTTP ' . $httpCode . '): ' . self::responseSnippet($response)
+            );
         }
 
         if (empty($decoded['success'])) {
@@ -146,5 +173,15 @@ class HubClient
         }
 
         return $decoded['data'] ?? [];
+    }
+
+    /** A short, single-line, tag-stripped snippet of a raw response body for error messages. */
+    private static function responseSnippet(string $response): string
+    {
+        $text = trim(preg_replace('/\s+/', ' ', strip_tags($response)));
+        if ($text === '') {
+            return '(empty body)';
+        }
+        return mb_strlen($text) > 200 ? mb_substr($text, 0, 200) . '…' : $text;
     }
 }
