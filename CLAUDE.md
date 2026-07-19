@@ -36,7 +36,7 @@ service properties, and — most importantly — the **upstream Hub API contract
 
 ## Dev server & credentials
 
-- Credentials live outside the repo in `..\..\.user\whmcs\` (i.e. `<Vh root>\.user\whmcs\`):
+- Credentials live outside the repo in `..\.user\whmcs\` (i.e. `<Vh root>\.user\whmcs\`):
   `ssh.openssh` (private key), `ssh.ppk`, `ssh.pub`.
 - This connector is verified on the same dev WHMCS as the Hub:
   `ssh -i <Vh root>\.user\whmcs\ssh.openssh whmcsdev@webhost-ftps.vpnhood.com`, web root
