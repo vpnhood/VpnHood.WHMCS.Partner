@@ -34,6 +34,14 @@ service properties, and — most importantly — the **upstream Hub API contract
 - **No build/lint/test tooling** is configured (no PHP CLI in this environment). Verify on a
   live WHMCS pair (partner + provider) — see `docs/DEVELOPMENT.md`.
 
+## Dev server & credentials
+
+- Credentials live outside the repo in `..\..\.user\whmcs\` (i.e. `<Vh root>\.user\whmcs\`):
+  `ssh.openssh` (private key), `ssh.ppk`, `ssh.pub`.
+- This connector is verified on the same dev WHMCS as the Hub:
+  `ssh -i <Vh root>\.user\whmcs\ssh.openssh whmcsdev@webhost-ftps.vpnhood.com`, web root
+  `/home/whmcsdev/web/whmcs-dev.vpnhood.com/public_html`, site `https://whmcs-dev.vpnhood.com`.
+
 ## Where things are
 
 - Module: `modules/servers/vpnhoodpartner/`
