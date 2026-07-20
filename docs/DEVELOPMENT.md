@@ -1,4 +1,4 @@
-# VpnHood Partner Connector — Developer Guide
+# VpnHood! Partner Connector — Developer Guide
 
 Developer-facing documentation for this repository. End-user/partner install steps are in
 the top-level `README.md`; this document explains the **internals and the upstream API
@@ -39,7 +39,7 @@ modules/
 This is a **server module** (`RequiresServer => false`) paired with a companion **addon**,
 `vpnhoodpartnerconfig`, that holds the single global Hub connection — mirroring the
 `vpnhoodconfig` + MANAGER pattern in the VpnHood.WHMCS repo. The partner configures it once
-under **System Settings → Addon Modules → VpnHood Partner Connector Configuration**; there is
+under **System Settings → Addon Modules → VpnHood! Partner Connector Configuration**; there is
 no WHMCS "Server" to set up.
 
 `HubClient::fromConfig` reads the addon settings from `tbladdonmodules`:

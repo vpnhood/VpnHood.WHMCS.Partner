@@ -19,9 +19,9 @@ if (!defined("WHMCS")) {
 function vpnhoodpartnerconfig_config()
 {
     return [
-        'name'        => 'VpnHood Partner Connector Configuration',
+        'name'        => 'VpnHood! Partner Connector Configuration',
         'description' => 'Connection to your provider\'s VpnHood! Partner Hub. '
-            . 'The VpnHood Partner Connector server module reads these settings.',
+            . 'The VpnHood! Partner Connector server module reads these settings.',
         'version'     => '1.0',
         'author'      => 'VpnHood!',
 
@@ -72,7 +72,7 @@ function vpnhoodpartnerconfig_deactivate()
 
 function vpnhoodpartnerconfig_output($vars)
 {
-    echo '<p>These settings are used by the <strong>VpnHood Partner Connector</strong> server module to reach'
+    echo '<p>These settings are used by the <strong>VpnHood! Partner Connector</strong> server module to reach'
         . ' your provider\'s VpnHood! Partner Hub. Configure the <strong>Hub URL</strong>, <strong>API Key</strong>'
         . ' and <strong>API Secret</strong> above, then assign the connector module to your products.</p>';
 }
