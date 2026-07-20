@@ -1,0 +1,68 @@
+{
+  "_comment": "Connector-side test fixtures for the shared dev WHMCS (hub + connector on the same install). Applied by VpnHood.WHMCS/tests/bootstrap/init-skeleton.sh — the fixture spec lives here because it is connector domain knowledge; the idempotent apply engine (skeleton.php) lives in the hub repo, which owns the dev environment. ${VARS} are substituted from env by the engine.",
+
+  "requiredModules": [
+    "modules/servers/vpnhoodpartner",
+    "modules/addons/vpnhoodpartnerconfig"
+  ],
+
+  "addons": [
+    {
+      "module": "vpnhoodpartnerconfig",
+      "_comment": "Connector installation config: point the connector at the dev Hub with the test partner credentials. ApiSecret is stored plaintext — HubClient::decryptSetting tolerates that by design.",
+      "settings": {
+        "version": "1.0",
+        "access": "1",
+        "HubUrl": "${WHMCS_DEV_URL}",
+        "ApiKey": "${PARTNER_API_KEY}",
+        "ApiSecret": "${PARTNER_API_SECRET}",
+        "SkipTlsVerify": "on"
+      }
+    }
+  ],
+
+  "productGroup": {
+    "name": "VpnHood! CONNECT (Partner Shop)",
+    "slug": "partner-shop",
+    "hidden": 0,
+    "order": 4,
+    "disabledgateways": ""
+  },
+
+  "products": [
+    {
+      "slug": "partner-one-month-premium-code",
+      "name": "One-Month Premium Code",
+      "paytype": "onetime",
+      "price": "3.00",
+      "type": "other",
+      "servertype": "vpnhoodpartner",
+      "autosetup": "payment",
+      "welcomeemail": 0,
+      "configoption1": "reseller-one-month-premium-code",
+      "_moduleSettings": "configoption1 = downstreamRef → the hub product mapped to the test partner"
+    },
+    {
+      "slug": "partner-one-month-premium-code-subscription",
+      "name": "One-Month Premium Code (Subscription)",
+      "paytype": "recurring",
+      "price": "3.00",
+      "type": "other",
+      "servertype": "vpnhoodpartner",
+      "autosetup": "payment",
+      "welcomeemail": 0,
+      "configoption1": "reseller-one-month-premium-code-subscription",
+      "_moduleSettings": "recurring variant, mapped to the hub subscription product"
+    }
+  ],
+
+  "clients": {
+    "buyer": {
+      "email": "test-buyer@vpnhood.com",
+      "firstname": "Test",
+      "lastname": "Buyer",
+      "minCredit": 0,
+      "_role": "The reseller's end customer: buys the connector products; the connector fulfils by ordering from the Hub. Lives here because the buyer belongs to the connector side."
+    }
+  }
+}
