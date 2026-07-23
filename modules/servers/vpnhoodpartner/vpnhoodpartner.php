@@ -339,12 +339,10 @@ function vpnhoodpartner_CreateAccount(array $params): string
         $key = $data['keys'][0];
 
         // Persist only what later steps need: the upstream ORDER id (required by every
-        // lifecycle relay and by getAccessCode) and the access token id (reference only —
-        // the client area re-fetches the live code through the Hub, which resolves the
-        // token from our own order rather than trusting anything we send).
+        // lifecycle relay) and the delivered access code (client-area display).
         $params['model']->serviceProperties->save([
             'upstreamOrderId' => $key['upstreamOrderId'] ?? '',
-            'accessTokenId'   => $key['accessTokenId'] ?? '',
+            'accessCode'      => $key['accessCode'] ?? '',
         ]);
 
         return 'success';
@@ -415,39 +413,16 @@ function vpnhoodpartner_upstreamOrderId(array $params): string
 }
 
 /**
- * Client area: a "Get Premium Code" button that fetches the CURRENT access code from the
- * Hub on demand, mirroring the VpnHood Store module's client area.
- *
- * The code is deliberately NOT rendered from stored data: it is re-read live so a rotated
- * or re-issued code is always correct. Only this AJAX request talks to the Hub — the normal
- * page render still does no upstream round-trip.
+ * Client area: show the delivered access code to the partner's own customer.
+ * The code was fetched and stored at provisioning time, so no upstream round-trip
+ * is needed here.
  */
 function vpnhoodpartner_ClientArea(array $params): array
 {
-    $isAjax = isset($_SERVER['HTTP_X_REQUESTED_WITH'])
-        && $_SERVER['HTTP_X_REQUESTED_WITH'] === 'XMLHttpRequest';
-
-    if ($isAjax) {
-        try {
-            $hub = HubClient::fromConfig();
-            $data = $hub->call('getAccessCode', [
-                'upstreamOrderId' => vpnhoodpartner_upstreamOrderId($params),
-            ]);
-
-            $accessCode = (string) ($data['accessCode'] ?? '');
-            if ($accessCode === '') {
-                throw new Exception('The Hub did not return an access code.');
-            }
-
-            echo $accessCode;
-            exit;
-        } catch (Exception $e) {
-            logModuleCall('vpnhoodpartner', __FUNCTION__, $params, $e->getMessage(), $e->getTraceAsString());
-            http_response_code(502);
-            echo 'Could not retrieve your access code. Please try again or contact support.';
-            exit;
-        }
-    }
-
-    return ['templatefile' => 'clientarea'];
+    return [
+        'templatefile'      => 'clientarea',
+        'templateVariables' => [
+            'accessCode' => (string) $params['model']->serviceProperties->get('accessCode'),
+        ],
+    ];
 }

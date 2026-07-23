@@ -69,7 +69,7 @@ the products the provider mapped to their account. `_ConfigOptions` also renders
    `availableCycles`; otherwise a warning is shown.
 3. **Allow Multiple Quantities** — with this Pricing-tab option WHMCS creates ONE service
    with quantity N (paid N×), but the connector stores exactly one `upstreamOrderId` +
-   `accessTokenId` per service, so it cannot deliver N keys. The notice flags the option
+   `accessCode` per service, so it cannot deliver N keys. The notice flags the option
    (comparing against the upstream's `allowMultipleQuantities`, `null` on older Hubs), and
    `_CreateAccount` rejects any service with quantity > 1. The Hub additionally rejects
    `order` calls with `quantity > 1` unless the upstream product allows multiple quantities.
@@ -78,16 +78,17 @@ the products the provider mapped to their account. `_ConfigOptions` also renders
 
 | WHMCS hook | Hub action | Notes |
 |------------|-----------|-------|
-| `_CreateAccount` | `order` | sends the service's `billingCycle`; stores `upstreamOrderId` + `accessTokenId` |
+| `_CreateAccount` | `order` | sends the service's `billingCycle`; stores `upstreamOrderId` + `accessCode` |
 | `_Renew` | `renew` | settles the outstanding upstream renewal invoice from partner credit |
 | `_SuspendAccount` | `suspend` | |
 | `_UnsuspendAccount` | `unsuspend` | |
 | `_TerminateAccount` | `terminate` | |
-| `_ClientArea` | `getAccessCode` | only on the "Get Premium Code" click (AJAX); the page render itself makes no Hub call |
+| `_ClientArea` | — | renders the stored `accessCode` directly; no Hub call on page view |
 
-The client area no longer renders a stored code. A **Get Premium Code** button fetches the
-**current** code live from the Hub on click (mirroring the VpnHood Store module), so a rotated
-or re-issued code is always correct. The normal page render still performs no upstream call.
+The client area shows the access code delivered at provisioning time — no button, no AJAX,
+no re-fetch through the Hub. If the upstream code is ever rotated, the stored value goes
+stale until the next full provisioning; there is currently no live re-fetch path from the
+connector.
 
 **Renewal is manual upstream.** Recurring Hub products do not auto-renew: the upstream WHMCS
 generates a renewal invoice and leaves it Unpaid until `renew` settles it from the partner's
@@ -137,9 +138,9 @@ unsupported billing cycle.
 ## Stored service properties
 
 `_CreateAccount` persists exactly two properties on the WHMCS service:
-- `upstreamOrderId` — required by every lifecycle relay and by `getAccessCode`.
-- `accessTokenId` — reference/diagnostics only. It is **not** sent to the Hub; the Hub
-  resolves the token from our own order.
+- `upstreamOrderId` — required by every lifecycle relay.
+- `accessCode` — the code delivered at provisioning time, rendered directly in the client
+  area. It is **not** re-fetched from the Hub afterward.
 
 (CSV/bulk delivery is not stored by the connector; it delivers a single access code.)
 
