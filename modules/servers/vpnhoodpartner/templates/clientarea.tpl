@@ -1,61 +1,30 @@
-<p>You can get your premium code using the button below.</p>
+<p>Your VPN access code is ready. Use it to activate VpnHood.</p>
 
-<button id="getPremiumCode" class="btn btn-success" type="button">Get Premium Code</button>
-
-<div id="resultBox" style="margin-top: 15px;"></div>
+{if $accessCode}
+    <div class="alert alert-success" style="font-size:1.1em;">
+        <strong>Access Code:</strong>
+        <span id="vhAccessCode">{$accessCode|escape}</span>
+    </div>
+    <button id="vhCopyCode" class="btn btn-default btn-sm" type="button">Copy code</button>
+{else}
+    <div class="alert alert-warning">
+        Your access code is not available yet. Please check back shortly or contact support.
+    </div>
+{/if}
 
 {literal}
 <script>
 document.addEventListener('DOMContentLoaded', function () {
-    var btn = document.getElementById('getPremiumCode');
-    var resultBox = document.getElementById('resultBox');
-    if (!btn || !resultBox) {
-        return;
-    }
-
-    btn.addEventListener('click', function () {
-        resultBox.innerHTML = '⏳ Fetching your code...';
-        btn.disabled = true;
-
-        fetch(window.location.href, {
-            method: 'GET',
-            headers: { 'X-Requested-With': 'XMLHttpRequest' }
-        })
-            .then(function (response) {
-                return response.text().then(function (text) {
-                    if (!response.ok) {
-                        throw new Error(text || 'Request failed');
-                    }
-                    return text;
-                });
-            })
-            .then(function (code) {
-                var formatted = code.trim().replace(/(\d{4})(?=\d)/g, '$1-');
-                resultBox.innerHTML =
-                    '<div class="alert alert-success" style="font-size:1.1em;">' +
-                    '<strong>Access Code:</strong> <span id="vhAccessCode"></span>' +
-                    '</div>' +
-                    '<button id="vhCopyCode" class="btn btn-default btn-sm" type="button">Copy code</button>';
-                document.getElementById('vhAccessCode').textContent = formatted;
-
-                var copyBtn = document.getElementById('vhCopyCode');
-                if (copyBtn && navigator.clipboard) {
-                    copyBtn.addEventListener('click', function () {
-                        navigator.clipboard.writeText(formatted).then(function () {
-                            copyBtn.textContent = 'Copied!';
-                            setTimeout(function () { copyBtn.textContent = 'Copy code'; }, 1500);
-                        });
-                    });
-                }
-            })
-            .catch(function (error) {
-                resultBox.innerHTML = '<div class="alert alert-danger"></div>';
-                resultBox.firstChild.textContent = '❌ ' + error.message;
-            })
-            .finally(function () {
-                btn.disabled = false;
+    var btn = document.getElementById('vhCopyCode');
+    var code = document.getElementById('vhAccessCode');
+    if (btn && code && navigator.clipboard) {
+        btn.addEventListener('click', function () {
+            navigator.clipboard.writeText(code.textContent.trim()).then(function () {
+                btn.textContent = 'Copied!';
+                setTimeout(function () { btn.textContent = 'Copy code'; }, 1500);
             });
-    });
+        });
+    }
 });
 </script>
 {/literal}

@@ -1,0 +1,69 @@
+{
+  "_comment": "Test-environment spec for the connector side (dev WHMCS). Applied by VpnHood.WHMCS's tests/bootstrap/skeleton.php, AFTER the hub spec, on the same dev box (Hub and connector are co-installed there — see docs/DEVELOPMENT.md). Create-if-missing, never destructive. Recorded from the live dev box on 2026-07-23.",
+
+  "productGroup": {
+    "name": "VpnHood! CONNECT (Partner Shop)",
+    "slug": "partner-shop",
+    "hidden": 0,
+    "order": 4,
+    "disabledgateways": ",paymenthood,stripe,paypal_ppcpv,paypal_acdc,protx,"
+  },
+
+  "products": [
+    {
+      "slug": "partner-one-month-premium-code",
+      "name": "One-Month Premium Code",
+      "paytype": "onetime",
+      "price": "3.00",
+      "type": "other",
+      "servertype": "vpnhoodpartner",
+      "autosetup": "payment",
+      "welcomeemail": 0,
+      "configoption1": "reseller-one-month-premium-code",
+      "_configoption1Note": "Upstream Product dropdown value — the Hub downstreamRef this maps to."
+    },
+    {
+      "slug": "partner-one-month-premium-code-subscription",
+      "name": "One-Month Premium Code (Subscription)",
+      "paytype": "recurring",
+      "price": "3.00",
+      "type": "other",
+      "servertype": "vpnhoodpartner",
+      "autosetup": "payment",
+      "welcomeemail": 0,
+      "configoption1": "reseller-one-month-premium-code-subscription",
+      "_configoption1Note": "Upstream Product dropdown value — the Hub downstreamRef this maps to."
+    }
+  ],
+
+  "requiredModules": [
+    "modules/servers/vpnhoodpartner",
+    "modules/addons/vpnhoodpartnerconfig"
+  ],
+
+  "addons": [
+    {
+      "module": "vpnhoodpartnerconfig",
+      "_comment": "Points the connector at the SAME dev WHMCS's Hub, using the same partner API key/secret the Hub partner authenticates with (self-referential test setup — Hub and connector co-installed on one box).",
+      "settings": {
+        "version": "1.0",
+        "access": "1",
+        "HubUrl": "${WHMCS_DEV_URL}",
+        "ApiKey": "${PARTNER_API_KEY}",
+        "ApiSecret": "${PARTNER_API_SECRET}",
+        "SkipTlsVerify": "on"
+      }
+    }
+  ],
+
+  "clients": {
+    "buyer": {
+      "email": "test-buyer@vpnhood.com",
+      "firstname": "Test",
+      "lastname": "Buyer",
+      "groupid": 0,
+      "minCredit": 200,
+      "_role": "The connector's own end customer. Pays for connector products from this client's native WHMCS credit, mirroring a real buyer."
+    }
+  }
+}
