@@ -24,10 +24,12 @@ service properties, and — most importantly — the **upstream Hub API contract
 - **The Hub API table in `docs/DEVELOPMENT.md` is the integration boundary.** If you change
   what actions/payloads this connector sends, update the Hub repo (**VpnHood.WHMCS**) in the
   same release, or partners break.
-- **Fetch once, store locally.** Read the access code at `_CreateAccount` time and persist it
-  in `serviceProperties`; render the client area from stored data (no per-view Hub calls).
-- **Every lifecycle relay needs `upstreamServiceId`** from `serviceProperties`; fail loudly
-  if missing.
+- **Store ids, not the code.** `_CreateAccount` persists `upstreamOrderId` + `accessTokenId`
+  in `serviceProperties`. The access code is **not** cached: the client area's "Get Premium
+  Code" button fetches it live via the Hub's `getAccessCode`, so a rotated code is always
+  correct. Page renders still make no Hub call — only the button click does.
+- **Every lifecycle relay needs `upstreamOrderId`** from `serviceProperties` (use
+  `vpnhoodpartner_upstreamOrderId()`); fail loudly if missing.
 - **Errors:** `logModuleCall('vpnhoodpartner', ...)` and return a `VpnHood Partner Error: ...`
   string from lifecycle hooks.
 - **Folder naming:** lowercase letters/numbers only (no underscores/spaces).

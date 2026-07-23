@@ -68,8 +68,8 @@ the products the provider mapped to their account. `_ConfigOptions` also renders
    product's enabled Pricing cycles must all be offered by the selected upstream product's
    `availableCycles`; otherwise a warning is shown.
 3. **Allow Multiple Quantities** — with this Pricing-tab option WHMCS creates ONE service
-   with quantity N (paid N×), but the connector stores exactly one `upstreamServiceId` +
-   `accessCode` per service, so it cannot deliver N keys. The notice flags the option
+   with quantity N (paid N×), but the connector stores exactly one `upstreamOrderId` +
+   `accessTokenId` per service, so it cannot deliver N keys. The notice flags the option
    (comparing against the upstream's `allowMultipleQuantities`, `null` on older Hubs), and
    `_CreateAccount` rejects any service with quantity > 1. The Hub additionally rejects
    `order` calls with `quantity > 1` unless the upstream product allows multiple quantities.
@@ -78,15 +78,22 @@ the products the provider mapped to their account. `_ConfigOptions` also renders
 
 | WHMCS hook | Hub action | Notes |
 |------------|-----------|-------|
-| `_CreateAccount` | `order` | sends the service's `billingCycle`; stores `upstreamServiceId` + `accessCode` |
-| `_Renew` | `renew` | sends `nextDueDate` for expiry sync |
+| `_CreateAccount` | `order` | sends the service's `billingCycle`; stores `upstreamOrderId` + `accessTokenId` |
+| `_Renew` | `renew` | settles the outstanding upstream renewal invoice from partner credit |
 | `_SuspendAccount` | `suspend` | |
 | `_UnsuspendAccount` | `unsuspend` | |
 | `_TerminateAccount` | `terminate` | |
-| `_ClientArea` | — | renders the stored access code; no upstream round-trip |
+| `_ClientArea` | `getAccessCode` | only on the "Get Premium Code" click (AJAX); the page render itself makes no Hub call |
 
-The access code is fetched once at provisioning time and stored locally, so the client area
-renders without calling the Hub again.
+The client area no longer renders a stored code. A **Get Premium Code** button fetches the
+**current** code live from the Hub on click (mirroring the VpnHood Store module), so a rotated
+or re-issued code is always correct. The normal page render still performs no upstream call.
+
+**Renewal is manual upstream.** Recurring Hub products do not auto-renew: the upstream WHMCS
+generates a renewal invoice and leaves it Unpaid until `renew` settles it from the partner's
+credit. `renew` therefore no longer takes `nextDueDate` — the upstream derives the new term
+when the invoice is paid. If the upstream has not generated that invoice yet, `renew` returns
+**409** and `_Renew` fails loudly rather than reporting a renewal that did not happen.
 
 ## Upstream Hub API contract (must match VpnHood.WHMCS)
 
@@ -99,11 +106,18 @@ headers `X-Vpnhood-Key`, `X-Vpnhood-Secret`. Response envelope:
 |--------|----------------|-----------------|
 | `getBalance` | — | `clientId, balance, currency` |
 | `getProducts` | — | `products[] { downstreamRef, name, paymentType, allowMultipleQuantities, billingCycleMonths, availableCycles }` |
-| `order` | `downstreamRef`, `billingCycle?`, `quantity?`, `customerReference?` | `keys[] { upstreamServiceId, orderId, deliveryType, accessCode|csv }` |
-| `renew` | `upstreamServiceId`, `nextDueDate?` | `status, nextDueDate` |
-| `suspend` / `unsuspend` / `terminate` / `cancel` | `upstreamServiceId` | `status` |
-| `getOrder` | `upstreamServiceId` | `status, nextDueDate` |
+| `order` | `downstreamRef`, `billingCycle?`, `quantity?`, `customerReference?` | `keys[] { upstreamOrderId, customerReference, deliveryType, accessTokenId + accessCode \| csv }` |
+| `renew` | `upstreamOrderId` | `status, nextDueDate` (**409** when no renewal invoice is outstanding yet) |
+| `suspend` / `unsuspend` / `terminate` / `cancel` | `upstreamOrderId` | `status` |
+| `getOrder` | `upstreamOrderId` | `status, nextDueDate` |
+| `getAccessCode` | `upstreamOrderId` | `accessTokenId, accessCode` |
 | `getTransactions` | — | `transactions[]` |
+
+> `upstreamOrderId` is the upstream WHMCS **order id** and is the handle for every action.
+> The Hub resolves it to the underlying service itself, scoped to the calling partner, so an
+> order belonging to another partner returns `404`. Note `getAccessCode` does **not** take
+> `accessTokenId` — the Hub resolves the token from the partner's own order and never trusts
+> an id from the request.
 
 > ⚠️ This table is the integration boundary. If you change it here, change it in the Hub
 > repo's addon `README.md` and `docs/ARCHITECTURE.md` in the same release, or partners break.
@@ -123,8 +137,9 @@ unsupported billing cycle.
 ## Stored service properties
 
 `_CreateAccount` persists exactly two properties on the WHMCS service:
-- `upstreamServiceId` — required by every lifecycle relay.
-- `accessCode` — the delivered code shown in the client area.
+- `upstreamOrderId` — required by every lifecycle relay and by `getAccessCode`.
+- `accessTokenId` — reference/diagnostics only. It is **not** sent to the Hub; the Hub
+  resolves the token from our own order.
 
 (CSV/bulk delivery is not stored by the connector; it delivers a single access code.)
 

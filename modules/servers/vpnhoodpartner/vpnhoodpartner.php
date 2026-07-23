@@ -338,11 +338,13 @@ function vpnhoodpartner_CreateAccount(array $params): string
         }
         $key = $data['keys'][0];
 
-        // Persist only what later steps need: the upstream service id (required by
-        // every lifecycle relay) and the delivered access code (client-area display).
+        // Persist only what later steps need: the upstream ORDER id (required by every
+        // lifecycle relay and by getAccessCode) and the access token id (reference only —
+        // the client area re-fetches the live code through the Hub, which resolves the
+        // token from our own order rather than trusting anything we send).
         $params['model']->serviceProperties->save([
-            'upstreamServiceId' => $key['upstreamServiceId'] ?? '',
-            'accessCode'        => $key['accessCode'] ?? '',
+            'upstreamOrderId' => $key['upstreamOrderId'] ?? '',
+            'accessTokenId'   => $key['accessTokenId'] ?? '',
         ]);
 
         return 'success';
@@ -352,11 +354,17 @@ function vpnhoodpartner_CreateAccount(array $params): string
     }
 }
 
+/**
+ * Relay a renewal upstream.
+ *
+ * The Hub no longer accepts a nextDueDate override: upstream renewal settles the
+ * outstanding upstream renewal invoice from the partner's credit, and WHMCS derives the
+ * new term from that. If the upstream has not generated its renewal invoice yet, the Hub
+ * answers 409 and this fails loudly rather than reporting a renewal that did not happen.
+ */
 function vpnhoodpartner_Renew(array $params): string
 {
-    return vpnhoodpartner_relayLifecycle($params, 'renew', [
-        'nextDueDate' => $params['model']['nextduedate'] ?? null,
-    ]);
+    return vpnhoodpartner_relayLifecycle($params, 'renew');
 }
 
 function vpnhoodpartner_SuspendAccount(array $params): string
@@ -380,13 +388,10 @@ function vpnhoodpartner_TerminateAccount(array $params): string
 function vpnhoodpartner_relayLifecycle(array $params, string $action, array $extra = []): string
 {
     try {
-        $upstreamServiceId = $params['model']->serviceProperties->get('upstreamServiceId');
-        if (!$upstreamServiceId) {
-            throw new Exception('Missing upstream service id; was the order provisioned?');
-        }
+        $upstreamOrderId = vpnhoodpartner_upstreamOrderId($params);
 
         $hub = HubClient::fromConfig();
-        $hub->call($action, array_merge(['upstreamServiceId' => $upstreamServiceId], array_filter($extra)));
+        $hub->call($action, array_merge(['upstreamOrderId' => $upstreamOrderId], array_filter($extra)));
 
         return 'success';
     } catch (Exception $e) {
@@ -396,16 +401,53 @@ function vpnhoodpartner_relayLifecycle(array $params, string $action, array $ext
 }
 
 /**
- * Client area: show the delivered access code to the partner's own customer.
- * The code was fetched and stored at provisioning time, so no upstream round-trip
- * is needed here.
+ * Read the stored upstream order id, or fail loudly if the service was never provisioned.
+ *
+ * @throws Exception
+ */
+function vpnhoodpartner_upstreamOrderId(array $params): string
+{
+    $upstreamOrderId = (string) $params['model']->serviceProperties->get('upstreamOrderId');
+    if ($upstreamOrderId === '') {
+        throw new Exception('Missing upstream order id; was the order provisioned?');
+    }
+    return $upstreamOrderId;
+}
+
+/**
+ * Client area: a "Get Premium Code" button that fetches the CURRENT access code from the
+ * Hub on demand, mirroring the VpnHood Store module's client area.
+ *
+ * The code is deliberately NOT rendered from stored data: it is re-read live so a rotated
+ * or re-issued code is always correct. Only this AJAX request talks to the Hub — the normal
+ * page render still does no upstream round-trip.
  */
 function vpnhoodpartner_ClientArea(array $params): array
 {
-    return [
-        'templatefile'      => 'clientarea',
-        'templateVariables' => [
-            'accessCode' => (string) $params['model']->serviceProperties->get('accessCode'),
-        ],
-    ];
+    $isAjax = isset($_SERVER['HTTP_X_REQUESTED_WITH'])
+        && $_SERVER['HTTP_X_REQUESTED_WITH'] === 'XMLHttpRequest';
+
+    if ($isAjax) {
+        try {
+            $hub = HubClient::fromConfig();
+            $data = $hub->call('getAccessCode', [
+                'upstreamOrderId' => vpnhoodpartner_upstreamOrderId($params),
+            ]);
+
+            $accessCode = (string) ($data['accessCode'] ?? '');
+            if ($accessCode === '') {
+                throw new Exception('The Hub did not return an access code.');
+            }
+
+            echo $accessCode;
+            exit;
+        } catch (Exception $e) {
+            logModuleCall('vpnhoodpartner', __FUNCTION__, $params, $e->getMessage(), $e->getTraceAsString());
+            http_response_code(502);
+            echo 'Could not retrieve your access code. Please try again or contact support.';
+            exit;
+        }
+    }
+
+    return ['templatefile' => 'clientarea'];
 }
