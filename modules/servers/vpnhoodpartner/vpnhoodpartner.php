@@ -367,7 +367,9 @@ function vpnhoodpartner_Renew(array $params): string
 
 function vpnhoodpartner_SuspendAccount(array $params): string
 {
-    return vpnhoodpartner_relayLifecycle($params, 'suspend');
+    return vpnhoodpartner_relayLifecycle($params, 'suspend', [
+        'suspendReason' => (string) ($params['suspendreason'] ?? ''),
+    ]);
 }
 
 function vpnhoodpartner_UnsuspendAccount(array $params): string

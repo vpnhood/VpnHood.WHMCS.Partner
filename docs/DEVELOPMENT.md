@@ -80,7 +80,7 @@ the products the provider mapped to their account. `_ConfigOptions` also renders
 |------------|-----------|-------|
 | `_CreateAccount` | `order` | sends the service's `billingCycle`; stores `upstreamOrderId` + `accessCode` |
 | `_Renew` | `renew` | settles the outstanding upstream renewal invoice from partner credit |
-| `_SuspendAccount` | `suspend` | |
+| `_SuspendAccount` | `suspend` | forwards WHMCS's `suspendreason` upstream as `suspendReason` |
 | `_UnsuspendAccount` | `unsuspend` | |
 | `_TerminateAccount` | `terminate` | |
 | `_ClientArea` | — | renders the stored `accessCode` directly; no Hub call on page view |
@@ -109,7 +109,8 @@ headers `X-Vpnhood-Key`, `X-Vpnhood-Secret`. Response envelope:
 | `getProducts` | — | `products[] { downstreamRef, name, paymentType, allowMultipleQuantities, billingCycleMonths, availableCycles }` |
 | `order` | `downstreamRef`, `billingCycle?`, `quantity?`, `customerReference?` | `keys[] { upstreamOrderId, customerReference, deliveryType, accessTokenId + accessCode \| csv }` |
 | `renew` | `upstreamOrderId` | `status, nextDueDate` (**409** when no renewal invoice is outstanding yet) |
-| `suspend` / `unsuspend` / `terminate` / `cancel` | `upstreamOrderId` | `status` |
+| `suspend` | `upstreamOrderId`, `suspendReason?` | `status` |
+| `unsuspend` / `terminate` / `cancel` | `upstreamOrderId` | `status` |
 | `getOrder` | `upstreamOrderId` | `status, nextDueDate` |
 | `getAccessCode` | `upstreamOrderId` | `accessTokenId, accessCode` |
 | `getTransactions` | — | `transactions[]` |
