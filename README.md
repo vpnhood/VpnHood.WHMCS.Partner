@@ -1,4 +1,4 @@
-# VpnHood Partner Connector (WHMCS)
+# VpnHood! Partner Connector (WHMCS)
 
 Resell **VpnHood** VPN keys from **your own WHMCS** at **your own prices**, without
 running any VPN infrastructure and without writing any code.
@@ -62,7 +62,7 @@ removed, so it is safe to re-run whenever VpnHood offers you something new.
 
 1. Go to **System Settings → Products/Services** and create a product at *your* price.
 2. **Module Settings** tab:
-   - **Module Name**: `VpnHood Partner Connector` (`vpnhoodpartner`).
+   - **Module Name**: `VpnHood! Partner Connector` (`vpnhoodpartner`).
    - **Upstream Product**: pick from the dropdown — it lists exactly the products VpnHood
      mapped to your account (each label shows its available billing cycles).
 3. Set your own pricing on the **Pricing** tab, matching the upstream product's cycle(s).

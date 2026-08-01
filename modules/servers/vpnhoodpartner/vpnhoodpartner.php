@@ -12,7 +12,7 @@
  * delivers that code to the partner's own customer.
  *
  * Configure the connection once under WHMCS → System Settings → Addon Modules →
- * VpnHood Partner Connector Configuration (Hub URL, API key, API secret). The
+ * VpnHood! Partner Connector Configuration (Hub URL, API key, API secret). The
  * per-product upstream mapping is chosen from a dropdown on the product's Module
  * Settings tab (populated live from the Hub).
  *
@@ -31,7 +31,7 @@ use WHMCS\Module\Server\VpnHoodPartner\HubClient;
 function vpnhoodpartner_MetaData(): array
 {
     return [
-        'DisplayName'   => 'VpnHood Partner Connector',
+        'DisplayName'   => 'VpnHood! Partner Connector',
         'APIVersion'    => '1.1',
         // Connection lives in the vpnhoodpartnerconfig addon, not a WHMCS Server.
         'RequiresServer' => false,
@@ -112,11 +112,11 @@ function vpnhoodpartner_ConfigOptions(array $params = []): array
         logModuleCall('vpnhoodpartner', __FUNCTION__, $params, $e->getMessage(), $e->getTraceAsString());
         return [
             'error' => [
-                'FriendlyName' => 'VpnHood Partner Connector',
+                'FriendlyName' => 'VpnHood! Partner Connector',
                 'Type'         => 'none',
                 'Description'  => "<div class='alert alert-danger' style='margin-bottom:0;'>Could not load upstream"
                     . ' products: ' . htmlspecialchars($e->getMessage())
-                    . '. Check <b>System Settings → Addon Modules → VpnHood Partner Connector Configuration</b>.</div>',
+                    . '. Check <b>System Settings → Addon Modules → VpnHood! Partner Connector Configuration</b>.</div>',
             ],
         ];
     }

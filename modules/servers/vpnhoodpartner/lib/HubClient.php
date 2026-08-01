@@ -57,7 +57,7 @@ class HubClient
         if ($url === '') {
             throw new Exception(
                 'VpnHood Partner Hub is not configured. Set the Hub URL, API Key and API Secret in '
-                . 'System Settings → Addon Modules → VpnHood Partner Connector Configuration.'
+                . 'System Settings → Addon Modules → VpnHood! Partner Connector Configuration.'
             );
         }
 
@@ -118,7 +118,7 @@ class HubClient
             if (preg_match('/[^\x20-\x7E]/', $credential)) {
                 throw new Exception(
                     $name . ' contains non-printable characters; re-save the API credentials in '
-                    . 'System Settings → Addon Modules → VpnHood Partner Connector Configuration.'
+                    . 'System Settings → Addon Modules → VpnHood! Partner Connector Configuration.'
                 );
             }
         }

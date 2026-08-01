@@ -35,6 +35,21 @@ service properties, and — most importantly — the **upstream Hub API contract
 - **No build/lint/test tooling** is configured (no PHP CLI in this environment). Verify on a
   live WHMCS pair (partner + provider) — see `docs/DEVELOPMENT.md`.
 
+## Tests
+
+- `tests/bootstrap/connector-fixtures.json` — connector-side fixtures for the shared dev
+  WHMCS (installation config, partner-shop products, buyer client). Applied by the hub
+  repo's `VpnHood.WHMCS/tests/bootstrap/init-skeleton.sh`, which owns the apply engine —
+  run that before any test. Keep this spec in sync when connector config/products change.
+
+## Dev server & credentials
+
+- Credentials live outside the repo in `..\.user\whmcs\` (i.e. `<Vh root>\.user\whmcs\`):
+  `ssh.openssh` (private key), `ssh.ppk`, `ssh.pub`.
+- This connector is verified on the same dev WHMCS as the Hub:
+  `ssh -i <Vh root>\.user\whmcs\ssh.openssh whmcsdev@webhost-ftps.vpnhood.com`, web root
+  `/home/whmcsdev/web/whmcs-dev.vpnhood.com/public_html`, site `https://whmcs-dev.vpnhood.com`.
+
 ## Where things are
 
 - Module: `modules/servers/vpnhoodpartner/`
