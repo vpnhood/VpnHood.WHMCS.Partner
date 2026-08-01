@@ -25,6 +25,7 @@ The upstream Hub addon lives in the separate **VpnHood.WHMCS** repo
 modules/
   addons/vpnhoodpartnerconfig/
     vpnhoodpartnerconfig.php   global Hub connection settings (URL, key, secret)
+                               + the addon page: upstream product sync
   servers/vpnhoodpartner/
     vpnhoodpartner.php         WHMCS lifecycle hooks + _ConfigOptions + _ClientArea
     lib/HubClient.php          cURL client for the Hub API (key/secret over HTTPS)
@@ -73,6 +74,49 @@ the products the provider mapped to their account. `_ConfigOptions` also renders
    (comparing against the upstream's `allowMultipleQuantities`, `null` on older Hubs), and
    `_CreateAccount` rejects any service with quantity > 1. The Hub additionally rejects
    `order` calls with `quantity > 1` unless the upstream product allows multiple quantities.
+
+## Product sync (addon page)
+
+`vpnhoodpartnerconfig_output()` renders the addon's own admin page (**Addons → VpnHood
+Partner Connector Configuration**). It calls the Hub's existing `getProducts` — **no new Hub
+action, so the cross-repo contract is unchanged** — lists every product the provider mapped
+to this partner, and creates a local WHMCS product for the ones that do not exist yet.
+
+"Exists" is keyed on `tblproducts.servertype = 'vpnhoodpartner' AND configoption1 =
+downstreamRef` — the same pair `_CreateAccount` sends upstream, so the page's status column
+answers exactly the question that matters.
+
+Created products (via the `AddProduct` localAPI):
+
+| Field | Value | Why |
+|-------|-------|-----|
+| `module` / `configoption1` | `vpnhoodpartner` / `downstreamRef` | the mapping the connector needs, preselected |
+| `paytype` | upstream `paymentType` | a mismatch is what `vpnhoodpartner_cycleNotice` flags |
+| enabled cycles | upstream `availableCycles`, at **0.00** | the Hub says what a product *is*, never what to charge |
+| `hidden` | yes | a 0.00 product must not be orderable before the admin prices it |
+| `autosetup` | `payment` | provision when the customer's invoice is paid |
+| `allowqty` | left off | the connector stores one `upstreamOrderId` + `accessCode` per service and rejects quantity > 1, so mirroring the upstream's setting would create a product whose orders always fail |
+
+WHMCS specifics this relies on (verified on **9.0.3**):
+
+- In `tblpricing`, a cycle column of `-1` means *disabled*; passing **0** through
+  `AddProduct`'s `pricing` array is what **enables** a cycle. So the payload enables exactly
+  the upstream's cycles and leaves the rest at -1.
+- `AddProduct` writes only the currencies it is given, so the payload covers every row in
+  `tblcurrencies`.
+- `AddProduct` **silently ignores `allowqty`** — which happens to match the intent above, but
+  means it can never be set from here.
+- There is **no `DeleteProduct` API**. The sync is therefore deliberately **create-only**: it
+  never edits or removes an existing product, and re-running it is a no-op.
+
+A POST may only create a ref present in the `getProducts` response *just fetched for that
+request* — the form's values are never trusted on their own. The form is CSRF-protected with
+a per-admin-session token (same pattern as the Hub addon).
+
+The page also flags products that need attention: a **Payment Type mismatch** against the
+upstream, **Needs pricing** (every enabled cycle still 0), and **Hidden**.
+
+Covered by `tests/integration/sync-products.test.sh` in the **VpnHood.WHMCS** repo.
 
 ## Lifecycle → Hub action mapping
 

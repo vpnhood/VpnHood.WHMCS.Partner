@@ -38,6 +38,7 @@ service properties, and — most importantly — the **upstream Hub API contract
 ## Where things are
 
 - Module: `modules/servers/vpnhoodpartner/`
+- Hub connection settings + product-sync admin page: `modules/addons/vpnhoodpartnerconfig/`
 - Hub HTTP client: `modules/servers/vpnhoodpartner/lib/HubClient.php`
 - Client-area templates: `modules/servers/vpnhoodpartner/templates/`
 - Developer guide + API contract: `docs/DEVELOPMENT.md`

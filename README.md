@@ -41,6 +41,25 @@ VpnHood will give you:
 
 ## Product setup
 
+### The quick way: sync the products VpnHood offers you
+
+Go to **Addons → VpnHood Partner Connector Configuration**. The page lists every product
+VpnHood mapped to your account and shows which ones already exist in your WHMCS. Pick a
+product group, click **Create Missing Product(s)**, and each missing one is created for you —
+already assigned to the connector module with the right **Upstream Product** selected and the
+same billing cycles the upstream product offers.
+
+New products are created **hidden** and priced **0.00**, because only you decide your retail
+price. For each one:
+
+1. Set your price on the **Pricing** tab.
+2. Un-tick **Hidden** on the **Details** tab so customers can order it.
+
+The sync only ever **adds**. Products you already have are never modified, re-priced, or
+removed, so it is safe to re-run whenever VpnHood offers you something new.
+
+### Or create a product by hand
+
 1. Go to **System Settings → Products/Services** and create a product at *your* price.
 2. **Module Settings** tab:
    - **Module Name**: `VpnHood Partner Connector` (`vpnhoodpartner`).
