@@ -52,8 +52,7 @@ function vpnhoodpartnerconfig_config()
                 'FriendlyName' => 'Hub URL',
                 'Type'         => 'text',
                 'Size'         => '60',
-                'Description'  => 'Your provider\'s WHMCS base URL. Pre-filled with VpnHood\'s own hub — '
-                    . 'change it only if your provider gave you a different address.',
+                'Description'  => 'Your provider\'s WHMCS base URL.',
                 // Pre-filled so the common case needs no typing. WHMCS applies a Default
                 // when the setting does not exist yet, i.e. on a fresh activation; it never
                 // overwrites a value a partner has already saved. HubClient trims any
