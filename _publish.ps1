@@ -222,17 +222,22 @@ try {
 
     # --- report what actually shipped ----------------------------------------
     Write-Host ''
-    $released = Invoke-Native gh @('release', 'list', '--limit', '1', '--json', 'tagName,url,isDraft') -AllowFailure
+    # `gh release list --json` has no url field — only `gh release view` does — and gh
+    # answers an unknown field with plain text, so parse defensively either way.
+    $released = Invoke-Native gh @('release', 'list', '--limit', '1', '--json', 'tagName,isDraft') -AllowFailure
+    $info = @()
     if ($released) {
-        $info = @(($released -join '') | ConvertFrom-Json)
-        if ($info.Count -gt 0) {
-            if ($info[0].isDraft) {
-                Step "Draft $($info[0].tagName) created — review it, then press Publish"
-            } else {
-                Step "Released $($info[0].tagName)"
-            }
-            Write-Host "    $($info[0].url)" -ForegroundColor Green
+        try { $info = @(($released -join '') | ConvertFrom-Json) } catch { $info = @() }
+    }
+    if ($info.Count -gt 0) {
+        $releasedTag = $info[0].tagName
+        if ($info[0].isDraft) {
+            Step "Draft $releasedTag created — review it, then press Publish"
+        } else {
+            Step "Released $releasedTag"
         }
+        $url = Invoke-Native gh @('release', 'view', $releasedTag, '--json', 'url', '-q', '.url') -AllowFailure
+        if ($url) { Write-Host "    $($url -join '')" -ForegroundColor Green }
     }
 
     # The workflow pushed a bump commit and a tag; this clone is now behind.
