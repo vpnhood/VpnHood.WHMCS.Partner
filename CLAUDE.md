@@ -32,6 +32,11 @@ service properties, and — most importantly — the **upstream Hub API contract
 - **Errors:** `logModuleCall('vpnhoodpartner', ...)` and return a `VpnHood Partner Error: ...`
   string from lifecycle hooks.
 - **Folder naming:** lowercase letters/numbers only (no underscores/spaces).
+- **Versioning:** `VERSION` at the repo root is the source of truth and both modules
+  always carry the same number — never hand-edit a module's version, run
+  `scripts/set-version.sh`. The addon's `_config()` version is functional (WHMCS uses it
+  to trigger `vpnhoodpartnerconfig_upgrade()`), so it must be right in committed source.
+  **Bumping is done by CI, not locally** — see *Releasing* below.
 - **Never hand-edit a module's version.** The root `VERSION` file is the single source of
   truth; `scripts/set-version.sh` stamps it into `vpnhoodpartnerconfig` (`_config()`) and
   `vpnhoodpartner` (`whmcs.json`). `.github/workflows/release.yml` bumps the patch number,
@@ -40,6 +45,13 @@ service properties, and — most importantly — the **upstream Hub API contract
 - **No build/lint/test tooling** is configured (no PHP CLI in this environment). The only CI
   is the release workflow, which versions and tags — it does not build or test. Verify on a
   live WHMCS pair (partner + provider) — see `docs/DEVELOPMENT.md`.
+
+## Releasing
+
+`./_publish.ps1` (patch bump by default; `minor`/`major`/`-Version x.y.z`/`-Draft`) triggers
+`.github/workflows/release.yml`, which bumps `VERSION`, commits, tags `v<version>`, builds
+`vpnhoodpartner-<version>.zip` (only `modules/`) and publishes the GitHub release. Nothing
+releases on push. Details in `docs/DEVELOPMENT.md` → *Versioning* / *Releasing*.
 
 ## Tests
 
@@ -58,6 +70,7 @@ service properties, and — most importantly — the **upstream Hub API contract
 
 ## Where things are
 
+- Release workflow: `.github/workflows/release.yml`, launched by `_publish.ps1`
 - Module: `modules/servers/vpnhoodpartner/`
 - Hub connection settings + product-sync admin page: `modules/addons/vpnhoodpartnerconfig/`
 - Hub HTTP client: `modules/servers/vpnhoodpartner/lib/HubClient.php`

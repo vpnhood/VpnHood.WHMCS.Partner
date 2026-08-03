@@ -1,0 +1,379 @@
+# Cuts a release of the connector: works out the next version, writes it into every
+# module, commits and tags that, builds the zip a partner uploads to their WHMCS, and
+# publishes it as a GitHub release.
+#
+# Triggered by hand (Actions -> Release -> Run workflow, or `_publish.ps1`).
+# Nothing is released on push — a release is always a deliberate act.
+#
+# Where the version comes from:
+#   ./VERSION in the repo is the source of truth, and this workflow is the only thing
+#   that edits it. Nobody bumps it on their machine, so two people releasing at once
+#   cannot pick the same number: the `concurrency` group serialises the runs, and the
+#   second one checks out the branch AFTER the first has pushed its bump commit, so it
+#   reads the already-incremented VERSION and moves on from there.
+#
+#   The version is not derived from the git tag, deliberately. For a WHMCS module the
+#   number in the files is functional, not decoration: WHMCS compares the addon's
+#   _config() version against tbladdonmodules to decide whether to run _upgrade() on a
+#   partner's install. It has to be correct in the committed source, at the commit it
+#   describes — a tag cannot carry it into the zip. The tag mirrors VERSION; it never
+#   defines it.
+name: Release
+
+run-name: >-
+  Release ${{ inputs.version != '' && inputs.version || format('({0} bump)', inputs.bump) }}
+  ${{ inputs.draft && '[draft]' || '' }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: "Which part of ./VERSION to increment before releasing. 'none' releases it as committed. minor/major are your call — nothing can infer them from the diff."
+        required: true
+        default: patch
+        type: choice
+        options: [patch, minor, major, none]
+      version:
+        description: "Exact version to release (MAJOR.MINOR.PATCH[-prerelease]). Overrides 'bump'. Leave empty unless you need a specific number."
+        required: false
+        type: string
+      draft:
+        description: "Publish as a draft — the release is created but stays invisible until you press Publish."
+        required: false
+        type: boolean
+        default: false
+      prerelease:
+        description: "Mark the release as a pre-release (not offered to partners as 'latest')."
+        required: false
+        type: boolean
+        default: false
+
+# Only what this workflow actually needs: push the bump commit + tag, create the release.
+permissions:
+  contents: write
+
+# Serialising releases is what makes bumping in CI safe: a second run does not start —
+# and so does not read ./VERSION — until the first has pushed its bump commit.
+# Queued, never cancelled: a cancelled release is a half-done one.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  MODULE: vpnhoodpartner
+
+jobs:
+  release:
+    name: Build and publish
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+        with:
+          # Full history + tags: needed to work out the last released version and to
+          # let `gh release create --generate-notes` diff against the last release.
+          fetch-depth: 0
+
+      - name: Refuse to release from anything but a branch
+        run: |
+          set -euo pipefail
+          if [ "${{ github.ref_type }}" != "branch" ]; then
+            echo "::error::the version bump has to be committed somewhere — run this from a branch, not ${{ github.ref_type }} ${{ github.ref_name }}"
+            exit 1
+          fi
+
+      - name: Work out the next version
+        id: v
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+          BUMP: ${{ inputs.bump }}
+          # SemVer with an optional pre-release tail (1.5.0-rc.1). No build metadata:
+          # PHP's version_compare() cannot order it, and that is what WHMCS uses to
+          # decide whether to run the addon's _upgrade() routine on a partner's install.
+          SEMVER: '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'
+        run: |
+          set -euo pipefail
+
+          # Refuse to build on a repo that is already inconsistent — a module left
+          # behind at an older number would ship the wrong version to partners.
+          bash scripts/set-version.sh --check
+
+          DECLARED="$(tr -d ' \t\r\n' < VERSION)"
+
+          # Re-read the tags now the concurrency gate has let this run in, so a release
+          # that finished while this one was queued is accounted for.
+          git fetch --tags --force --quiet origin
+          LATEST="$(git tag --list 'v*' --sort=-v:refname | head -n1)"
+
+          if [ -n "$INPUT_VERSION" ]; then
+            NEXT="$INPUT_VERSION"
+            BASIS="explicit input"
+          elif [ -z "$LATEST" ]; then
+            # Nothing has ever shipped, so there is nothing to bump from: the first
+            # release is the number the repo already declares.
+            NEXT="$DECLARED"
+            BASIS="./VERSION — first release, nothing to bump from"
+          elif [ "$BUMP" = "none" ]; then
+            NEXT="$DECLARED"
+            BASIS="./VERSION as committed"
+          else
+            CORE="${DECLARED%%-*}"
+            IFS='.' read -r MAJOR MINOR PATCH <<EOF
+          $CORE
+          EOF
+            case "$BUMP" in
+              major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+              minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
+              patch)
+                # Promoting a pre-release: the patch after 1.5.0-rc.1 is 1.5.0 itself,
+                # not 1.5.1 — the final release of that version has not happened yet.
+                if [ "$DECLARED" = "$CORE" ]; then PATCH=$((PATCH + 1)); fi
+                ;;
+              *) echo "::error::unknown bump '$BUMP'"; exit 1 ;;
+            esac
+            NEXT="$MAJOR.$MINOR.$PATCH"
+            BASIS="$BUMP bump of $DECLARED"
+          fi
+
+          if ! printf '%s' "$NEXT" | grep -qE "$SEMVER"; then
+            echo "::error::'$NEXT' is not MAJOR.MINOR.PATCH[-prerelease]"
+            exit 1
+          fi
+
+          # A shipped version is immutable: partners have that exact zip.
+          if git rev-parse -q --verify "refs/tags/v$NEXT" >/dev/null; then
+            echo "::error::v$NEXT is already released — bump instead of overwriting it"
+            exit 1
+          fi
+          # Going backwards is legitimate on a hotfix branch, but is much more often a
+          # reverted bump commit, so say so rather than silently shipping it.
+          if [ -n "$LATEST" ]; then
+            HIGHEST="$(printf '%s\n%s\n' "${LATEST#v}" "$NEXT" | sort -V | tail -n1)"
+            if [ "$HIGHEST" != "$NEXT" ]; then
+              echo "::warning::$NEXT is not newer than the last tag $LATEST — releasing anyway; WHMCS will not run _upgrade() on installs already past it"
+            fi
+          fi
+
+          echo "Last tagged: ${LATEST:-none}"
+          echo "Releasing:   $NEXT  ($BASIS)"
+
+          bash scripts/set-version.sh "$NEXT"
+
+          # A pre-release version is a pre-release, whoever ticked what.
+          PRE=${{ inputs.prerelease }}
+          case "$NEXT" in *-*) PRE=true ;; esac
+
+          {
+            echo "version=$NEXT"
+            echo "tag=v$NEXT"
+            echo "asset=$MODULE-$NEXT.zip"
+            echo "previous=$LATEST"
+            echo "prerelease=$PRE"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Lint the PHP that ships in the zip
+        run: |
+          set -euo pipefail
+          if ! command -v php >/dev/null 2>&1; then
+            echo "::warning::no PHP on the runner — skipping the syntax check"
+            exit 0
+          fi
+          php -v | head -n1
+          find modules -name '*.php' -print0 | xargs -0 -r -n1 php -l
+
+      - name: Commit the version bump
+        env:
+          TAG: ${{ steps.v.outputs.tag }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo "Every module already declared ${{ steps.v.outputs.version }} — nothing to commit."
+            exit 0
+          fi
+
+          git config user.name  'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add VERSION modules
+          git commit -m "Release $TAG"
+
+          # Someone may have pushed to the branch while this ran; rebase onto them
+          # rather than failing the release outright.
+          for attempt in 1 2 3; do
+            if git push origin "HEAD:$BRANCH"; then
+              exit 0
+            fi
+            if [ "$attempt" = "3" ]; then
+              echo "::error::could not push the version bump to $BRANCH"
+              exit 1
+            fi
+            echo "Push rejected — rebasing onto origin/$BRANCH and retrying."
+            git fetch --quiet origin "$BRANCH"
+            git rebase "origin/$BRANCH"
+          done
+
+      - name: Tag the release commit
+        env:
+          TAG: ${{ steps.v.outputs.tag }}
+        run: |
+          set -euo pipefail
+          git tag -a "$TAG" -m "VpnHood! Partner Connector $TAG"
+          git push origin "refs/tags/$TAG"
+
+      - name: Build the partner zip
+        env:
+          ASSET: ${{ steps.v.outputs.asset }}
+        run: |
+          set -euo pipefail
+          STAGE="$RUNNER_TEMP/pkg"
+          rm -rf "$STAGE" && mkdir -p "$STAGE"
+
+          # The zip holds ONLY `modules/`, because a partner extracts it at the root of
+          # their WHMCS install: every path in it is one they are agreeing to merge in.
+          # Repo-only material (docs/, scripts/, tests/, .github/) is deliberately absent.
+          cp -R modules "$STAGE/modules"
+
+          # LGPL: the licence travels with the code we distribute, inside each module.
+          cp LICENSE "$STAGE/modules/servers/vpnhoodpartner/LICENSE"
+          cp LICENSE "$STAGE/modules/addons/vpnhoodpartnerconfig/LICENSE"
+
+          find "$STAGE" \( -name '*.bak' -o -name '.DS_Store' -o -name 'Thumbs.db' \) -delete
+
+          # Sorted input + -X (no uid/gid/extra attrs) keeps the archive byte-stable, so
+          # rebuilding the same commit reproduces the same checksum.
+          ( cd "$STAGE" && find modules | LC_ALL=C sort | zip -q -X "$GITHUB_WORKSPACE/$ASSET" -@ )
+
+          sha256sum "$ASSET" > "$ASSET.sha256"
+          ls -lh "$ASSET"
+
+      - name: Verify the zip
+        env:
+          VERSION: ${{ steps.v.outputs.version }}
+          ASSET: ${{ steps.v.outputs.asset }}
+        run: |
+          set -euo pipefail
+          unzip -Z1 "$ASSET"
+
+          # Everything WHMCS needs must be in there, at the path it will be extracted to.
+          for f in \
+            modules/servers/vpnhoodpartner/vpnhoodpartner.php \
+            modules/servers/vpnhoodpartner/whmcs.json \
+            modules/servers/vpnhoodpartner/lib/HubClient.php \
+            modules/servers/vpnhoodpartner/templates/clientarea.tpl \
+            modules/servers/vpnhoodpartner/templates/error.tpl \
+            modules/addons/vpnhoodpartnerconfig/vpnhoodpartnerconfig.php
+          do
+            unzip -Z1 "$ASSET" | grep -Fxq "$f" || { echo "::error::$f missing from $ASSET"; exit 1; }
+          done
+
+          # Nothing outside modules/ may be in the archive — it lands in the WHMCS root.
+          # (The tree's own root is stored as the entry `modules/`, hence the `|$`.)
+          if unzip -Z1 "$ASSET" | grep -vE '^modules(/|$)' | grep -q .; then
+            echo "::error::$ASSET contains paths outside modules/"
+            unzip -Z1 "$ASSET" | grep -vE '^modules(/|$)'
+            exit 1
+          fi
+
+          # Both halves must declare the version being tagged: the addon's number is what
+          # WHMCS compares to decide whether to run _upgrade(), and the connector's is
+          # what the addon page shows. A mismatch is a half-broken upgrade for a partner.
+          unzip -p "$ASSET" modules/servers/vpnhoodpartner/whmcs.json \
+            | grep -q "\"version\"[[:space:]]*:[[:space:]]*\"$VERSION\"" \
+            || { echo "::error::whmcs.json in the zip is not at $VERSION"; exit 1; }
+          unzip -p "$ASSET" modules/addons/vpnhoodpartnerconfig/vpnhoodpartnerconfig.php \
+            | grep -q "'version'[[:space:]]*=>[[:space:]]*'$VERSION'" \
+            || { echo "::error::vpnhoodpartnerconfig.php in the zip is not at $VERSION"; exit 1; }
+
+          sha256sum -c "$ASSET.sha256"
+          echo "$ASSET verified."
+
+      - name: Write the release notes
+        id: notes
+        env:
+          VERSION: ${{ steps.v.outputs.version }}
+          TAG: ${{ steps.v.outputs.tag }}
+          ASSET: ${{ steps.v.outputs.asset }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          SHA="$(cut -d' ' -f1 < "$ASSET.sha256")"
+          NOTES="$RUNNER_TEMP/notes.md"
+
+          cat > "$NOTES" <<EOF
+          **VpnHood! Partner Connector $VERSION** — the WHMCS server module (\`vpnhoodpartner\`)
+          plus its configuration addon (\`vpnhoodpartnerconfig\`).
+
+          ## Install or update
+
+          1. Download **\`$ASSET\`** below.
+          2. Upload it to the **root of your WHMCS installation** and extract it there. The zip
+             contains a single \`modules/\` folder that merges into your existing one.
+          3. **Delete the zip** from the server.
+          4. *New installs only:* **System Settings → Addon Modules**, activate **VpnHood! Partner
+             Connector Configuration**, then **Configure** and enter your Hub URL, API Key and API Secret.
+
+          Updating is the same three steps. Extracting over the top replaces the module files and
+          leaves your settings, products and services untouched; open **Addons → VpnHood Partner
+          Connector Configuration** afterwards to let WHMCS run the upgrade and confirm both halves
+          report $VERSION.
+
+          Full instructions: [README](https://github.com/$REPO/blob/$TAG/README.md)
+
+          ## Verify your download
+
+          \`\`\`
+          sha256  $SHA
+          \`\`\`
+
+          EOF
+
+          echo "path=$NOTES" >> "$GITHUB_OUTPUT"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Publish the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.v.outputs.tag }}
+          ASSET: ${{ steps.v.outputs.asset }}
+          NOTES: ${{ steps.notes.outputs.path }}
+          DRAFT: ${{ inputs.draft }}
+          PRERELEASE: ${{ steps.v.outputs.prerelease }}
+        run: |
+          set -euo pipefail
+          args=(
+            "$TAG"
+            "$ASSET"
+            "$ASSET.sha256"
+            --title "VpnHood! Partner Connector $TAG"
+            --notes-file "$NOTES"
+            --generate-notes
+            --verify-tag
+          )
+          if [ "$DRAFT" = "true" ]; then args+=(--draft); fi
+          if [ "$PRERELEASE" = "true" ]; then args+=(--prerelease); fi
+          # A real, final release is the one partners should be pointed at.
+          if [ "$DRAFT" != "true" ] && [ "$PRERELEASE" != "true" ]; then args+=(--latest); fi
+          gh release create "${args[@]}"
+
+      - name: Summarise
+        env:
+          TAG: ${{ steps.v.outputs.tag }}
+          ASSET: ${{ steps.v.outputs.asset }}
+          SHA: ${{ steps.notes.outputs.sha }}
+          PREVIOUS: ${{ steps.v.outputs.previous }}
+          REPO: ${{ github.repository }}
+        run: |
+          {
+            echo "## Released $TAG"
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Previous release | ${PREVIOUS:-none} |"
+            echo "| Asset | \`$ASSET\` |"
+            echo "| sha256 | \`$SHA\` |"
+            echo "| Draft | ${{ inputs.draft }} |"
+            echo "| Pre-release | ${{ steps.v.outputs.prerelease }} |"
+            echo
+            echo "https://github.com/$REPO/releases/tag/$TAG"
+          } >> "$GITHUB_STEP_SUMMARY"
