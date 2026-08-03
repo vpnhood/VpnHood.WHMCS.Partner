@@ -1,0 +1,106 @@
+<#
+.SYNOPSIS
+    Regenerate the WHMCS admin screenshots used by README.md.
+
+.DESCRIPTION
+    Drives a real WHMCS admin session with Playwright and writes PNGs to docs/images/.
+    Credentials are read from the credentials folder outside the repo and passed to the
+    capture script through the environment, so they are never written to disk here and
+    never appear in a committed file.
+
+    Sensitive values are overwritten in the page before any screenshot is taken — see
+    the header of capture-screenshots.js for what and why. The script reports anything
+    credential-shaped that survived into a captured image; review the PNGs regardless.
+
+    Playwright drives the Chrome already installed on the machine, so no browser
+    download is needed.
+
+.PARAMETER Url
+    WHMCS to capture from. Defaults to the shared dev install.
+
+.PARAMETER CredentialsPath
+    File holding the admin credentials, in the format written by the VpnHood dev setup:
+    a line "username:", the username, a blank line, "password:", then the password.
+
+.PARAMETER ProductId
+    Product to use for the Module Settings shot. Defaults to whichever product the
+    connector addon page links to.
+
+.PARAMETER OutDir
+    Where to write the PNGs. Defaults to docs/images/.
+
+.EXAMPLE
+    ./scripts/capture-screenshots.ps1
+    Recapture every screenshot from the dev WHMCS into docs/images/.
+
+.EXAMPLE
+    ./scripts/capture-screenshots.ps1 -Url https://my-whmcs.example.com
+    Capture from a different install.
+#>
+[CmdletBinding()]
+param(
+    [string] $Url = 'https://whmcs-dev.vpnhood.com',
+    [string] $CredentialsPath,
+    [string] $ProductId,
+    [string] $OutDir
+)
+
+$ErrorActionPreference = 'Stop'
+Set-StrictMode -Version Latest
+
+$RepoRoot = Split-Path -Parent $PSScriptRoot
+if (-not $OutDir) { $OutDir = Join-Path $RepoRoot 'docs\images' }
+if (-not $CredentialsPath) {
+    # <Vh root>\.user\whmcs\ — outside the repo, never committed. See CLAUDE.md.
+    $CredentialsPath = Join-Path (Split-Path -Parent $RepoRoot) '.user\whmcs\admin_password_dev.txt'
+}
+
+function Fail([string] $Message) { Write-Host "ERROR: $Message" -ForegroundColor Red; exit 1 }
+
+if (-not (Get-Command node -ErrorAction SilentlyContinue)) { Fail 'Node.js not found.' }
+if (-not (Test-Path $CredentialsPath)) {
+    Fail "No credentials at $CredentialsPath. Pass -CredentialsPath, or see CLAUDE.md for where the dev credentials live."
+}
+
+# Playwright lives in a throwaway folder, not in the repo: this is a maintenance tool
+# run occasionally, and the module itself has no JavaScript toolchain to attach it to.
+$toolDir = Join-Path ([System.IO.Path]::GetTempPath()) 'vpnhood-shot-tools'
+if (-not (Test-Path (Join-Path $toolDir 'node_modules\playwright'))) {
+    Write-Host '==> Installing Playwright (uses your existing Chrome, no browser download)' -ForegroundColor Cyan
+    New-Item -ItemType Directory -Path $toolDir -Force | Out-Null
+    '{ "name": "vpnhood-shot-tools", "private": true }' | Set-Content (Join-Path $toolDir 'package.json')
+    $env:PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = '1'
+    Push-Location $toolDir
+    try {
+        & npm install playwright --no-audit --no-fund --silent
+        if ($LASTEXITCODE -ne 0) { Fail 'npm install playwright failed.' }
+    } finally { Pop-Location }
+}
+
+$lines = Get-Content $CredentialsPath
+$user = ($lines | Select-Object -Skip 1 -First 1).Trim()
+$pass = ($lines | Select-Object -Skip 4 -First 1)
+if (-not $user -or -not $pass) { Fail "Could not parse a username and password out of $CredentialsPath." }
+
+Write-Host "==> Capturing from $Url into $OutDir" -ForegroundColor Cyan
+
+$env:WHMCS_URL = $Url
+$env:WHMCS_USER = $user
+$env:WHMCS_PASS = $pass
+$env:SHOT_DIR = $OutDir
+$env:WHMCS_PRODUCT_ID = $ProductId
+$env:NODE_PATH = Join-Path $toolDir 'node_modules'
+try {
+    & node (Join-Path $PSScriptRoot 'capture-screenshots.js')
+    $code = $LASTEXITCODE
+} finally {
+    # Do not leave the password sitting in the session environment.
+    Remove-Item Env:WHMCS_PASS -ErrorAction SilentlyContinue
+    Remove-Item Env:WHMCS_USER -ErrorAction SilentlyContinue
+}
+
+if ($code -ne 0) { Fail 'Capture failed.' }
+
+Write-Host ''
+Write-Host 'Review the images before committing:' -ForegroundColor Yellow
+Write-Host "  $OutDir"

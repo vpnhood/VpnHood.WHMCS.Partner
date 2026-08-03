@@ -302,6 +302,43 @@ Install steps are **not** repeated there. Two copies of the instructions drift, 
 copy on the release page is the one nobody remembers to update; the README is the single
 place installing is documented.
 
+## README screenshots
+
+`docs/images/*.png` are captured from a real WHMCS admin session, never mocked up, and
+regenerated with:
+
+```powershell
+./scripts/capture-screenshots.ps1                      # from the dev WHMCS
+./scripts/capture-screenshots.ps1 -Url https://…       # or any other install
+```
+
+It installs Playwright into a temp folder on first run (driving the Chrome already on
+the machine — no browser download) and reads admin credentials from
+`<Vh root>\.user\whmcs\admin_password_dev.txt`, passing them through the environment so
+they never touch the repo. Re-run it whenever the admin UI these steps describe changes.
+
+Two things the script exists to get right, because doing it by hand is where screenshots
+leak:
+
+- **Sensitive values are overwritten in the DOM *before* the screenshot**, not covered
+  by a box afterwards — a box can be cropped back off, a substituted value cannot. This
+  matters more than it looks: WHMCS's Configure screen is a *single shared form holding
+  every addon's settings*, so a naive capture of this module's fields also frames other
+  modules' live API keys. Credit balances are replaced with a neutral figure, and
+  **Skip TLS Verification** is un-ticked, since publishing it ticked would show partners
+  doing the one thing that field warns against.
+- **Every shot is an element screenshot scoped to the connector**, never a full page, so
+  whatever else the source install happens to have does not appear.
+
+Afterwards it scans what is *visible* in each captured element for credential-shaped
+text and reports anything suspicious. Treat that as a safety net, not a substitute for
+looking at the images — it has caught a real leak (a credit balance whose label and
+figure live in different DOM nodes) that a glance would have missed.
+
+The Hub URL placeholder in the script must stay in step with the `Default` of the
+`HubUrl` field in `vpnhoodpartnerconfig.php`, or the screenshot will show partners a
+value their install does not have.
+
 ## Conventions & testing
 
 - PHP 7.4+; no PHP toolchain/lint is configured in this environment — verify on a live WHMCS.
