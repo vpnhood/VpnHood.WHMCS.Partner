@@ -293,8 +293,19 @@ jobs:
 
           find "$STAGE" \( -name '*.bak' -o -name '.DS_Store' -o -name 'Thumbs.db' \) -delete
 
-          # Sorted input + -X (no uid/gid/extra attrs) keeps the archive byte-stable, so
-          # rebuilding the same commit reproduces the same checksum.
+          # zip records each file's mtime, and a fresh checkout stamps those with the
+          # time the runner cloned — so without this, rebuilding identical content
+          # produces a different archive every single run. Date everything from the last
+          # commit that touched what actually ships, which means a rebuild that changed
+          # only docs or tooling still reproduces the same bytes. That is exactly the
+          # condition `republish` allows, so this is what makes its promise true.
+          SOURCE_DATE="$(git log -1 --format=%cI -- modules VERSION)"
+          [ -n "$SOURCE_DATE" ] || { echo "::error::could not date modules/"; exit 1; }
+          echo "Payload last changed $SOURCE_DATE — stamping the archive with it."
+          find "$STAGE" -exec touch -d "$SOURCE_DATE" {} +
+
+          # Sorted input + -X (no uid/gid/extra attrs) does the rest: same payload in,
+          # same checksum out.
           ( cd "$STAGE" && find modules | LC_ALL=C sort | zip -q -X "$GITHUB_WORKSPACE/$ASSET" -@ )
 
           sha256sum "$ASSET" > "$ASSET.sha256"
@@ -389,7 +400,11 @@ jobs:
             "$TAG"
             "$ASSET"
             "$ASSET.sha256"
-            --title "VpnHood! Partner Connector $TAG"
+            # Just the tag, which is what GitHub itself defaults to. The repo sidebar
+            # truncates a long release name, and the version is the one part of it that
+            # has to survive — putting the product name first buries it. The product is
+            # already named by the repo, and again in the first line of the body.
+            --title "$TAG"
             --notes-file "$NOTES"
             --verify-tag
           )

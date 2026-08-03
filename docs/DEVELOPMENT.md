@@ -277,8 +277,16 @@ from an unprotected branch.
 The asset contains **only** `modules/` (plus a copy of `LICENSE` in each module folder).
 Everything in it lands in the partner's WHMCS root, so `docs/`, `scripts/`, `tests/` and
 `.github/` are deliberately absent — the workflow fails the build if any path outside
-`modules/` gets in. It is byte-stable for a given commit, and published with a `.sha256`
-alongside.
+`modules/` gets in. It is published with a `.sha256` alongside.
+
+The archive is **reproducible**: identical payload in, identical checksum out. Entries
+are sorted, `-X` drops uid/gid and extra attributes, and every file is stamped with the
+date of the last commit that touched `modules/` or `VERSION` — otherwise each file would
+carry the runner's checkout time and every rebuild would differ. That is what makes
+`-Republish` meaningful rather than just "upload it again".
+
+The release is titled with the bare tag (`v1.0.1`), because the repo sidebar truncates
+long release names and the version is the part that has to stay readable.
 
 It is named `vpnhoodpartner.zip`, with no version in the filename, so that
 
