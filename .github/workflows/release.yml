@@ -71,8 +71,8 @@ jobs:
       - name: Check out the repository
         uses: actions/checkout@v5
         with:
-          # Full history + tags: needed to work out the last released version and to
-          # let `gh release create --generate-notes` diff against the last release.
+          # Full history + tags: the release version is worked out from what has
+          # already shipped, and the bump commit is pushed back to the branch.
           fetch-depth: 0
 
       - name: Refuse to release from anything but a branch
@@ -172,10 +172,14 @@ jobs:
           PRE=${{ inputs.prerelease }}
           case "$NEXT" in *-*) PRE=true ;; esac
 
+          # The asset name carries no version, deliberately: that is what makes
+          # releases/latest/download/vpnhoodpartner.zip a stable link the README can
+          # point straight at. The version is in the release title, in the tag, and
+          # inside the zip where WHMCS reads it.
           {
             echo "version=$NEXT"
             echo "tag=v$NEXT"
-            echo "asset=$MODULE-$NEXT.zip"
+            echo "asset=$MODULE.zip"
             echo "previous=$LATEST"
             echo "prerelease=$PRE"
           } >> "$GITHUB_OUTPUT"
@@ -298,40 +302,22 @@ jobs:
         id: notes
         env:
           VERSION: ${{ steps.v.outputs.version }}
-          TAG: ${{ steps.v.outputs.tag }}
           ASSET: ${{ steps.v.outputs.asset }}
-          REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
           SHA="$(cut -d' ' -f1 < "$ASSET.sha256")"
           NOTES="$RUNNER_TEMP/notes.md"
 
+          # Deliberately minimal. Install steps live in the README and are not repeated
+          # here: two copies drift, and the one on the release page is the one nobody
+          # remembers to update. Only what is specific to THIS build goes in.
           cat > "$NOTES" <<EOF
           **VpnHood! Partner Connector $VERSION** — the WHMCS server module (\`vpnhoodpartner\`)
           plus its configuration addon (\`vpnhoodpartnerconfig\`).
 
-          ## Install or update
-
-          1. Download **\`$ASSET\`** below.
-          2. Upload it to the **root of your WHMCS installation** and extract it there. The zip
-             contains a single \`modules/\` folder that merges into your existing one.
-          3. **Delete the zip** from the server.
-          4. *New installs only:* **System Settings → Addon Modules**, activate **VpnHood! Partner
-             Connector Configuration**, then **Configure** and enter your Hub URL, API Key and API Secret.
-
-          Updating is the same three steps. Extracting over the top replaces the module files and
-          leaves your settings, products and services untouched; open **Addons → VpnHood Partner
-          Connector Configuration** afterwards to let WHMCS run the upgrade and confirm both halves
-          report $VERSION.
-
-          Full instructions: [README](https://github.com/$REPO/blob/$TAG/README.md)
-
-          ## Verify your download
-
           \`\`\`
           sha256  $SHA
           \`\`\`
-
           EOF
 
           echo "path=$NOTES" >> "$GITHUB_OUTPUT"
@@ -353,7 +339,6 @@ jobs:
             "$ASSET.sha256"
             --title "VpnHood! Partner Connector $TAG"
             --notes-file "$NOTES"
-            --generate-notes
             --verify-tag
           )
           if [ "$DRAFT" = "true" ]; then args+=(--draft); fi

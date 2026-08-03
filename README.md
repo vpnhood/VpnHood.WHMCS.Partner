@@ -30,8 +30,8 @@ VpnHood will give you:
 
 ## Installation
 
-1. Download **`vpnhoodpartner-<version>.zip`** from the
-   [latest release](https://github.com/vpnhood/VpnHood.WHMCS.Partner/releases/latest).
+1. Download **[vpnhoodpartner.zip](https://github.com/vpnhood/VpnHood.WHMCS.Partner/releases/latest/download/vpnhoodpartner.zip)**
+   — always the latest release.
 2. Upload the zip to the **root of your WHMCS installation** and extract it there. It contains a
    single `modules/` folder (`servers/vpnhoodpartner/` and `addons/vpnhoodpartnerconfig/`) that
    merges into your existing one.
@@ -42,10 +42,12 @@ VpnHood will give you:
    - **API Key**: your partner API Key.
    - **API Secret**: your partner API Secret.
 
-Every release also publishes a `.sha256` file. To check the download before you upload it:
+Every release also publishes a
+[checksum](https://github.com/vpnhood/VpnHood.WHMCS.Partner/releases/latest/download/vpnhoodpartner.zip.sha256).
+To check the download before you upload it, put both files in the same folder and run:
 
 ```sh
-sha256sum -c vpnhoodpartner-<version>.zip.sha256
+sha256sum -c vpnhoodpartner.zip.sha256
 ```
 
 ## Updating
