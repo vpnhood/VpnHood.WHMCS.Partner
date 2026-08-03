@@ -36,11 +36,21 @@ VpnHood will give you:
    single `modules/` folder (`servers/vpnhoodpartner/` and `addons/vpnhoodpartnerconfig/`) that
    merges into your existing one.
 3. **Delete the zip file** after extracting it.
-4. In WHMCS Admin go to **System Settings → Addon Modules**, activate **VpnHood Partner
-   Connector Configuration**, then click **Configure** and enter:
-   - **Hub URL**: the VpnHood! Partner Hub URL.
+4. In WHMCS Admin go to **System Settings → Addon Modules** and click **Activate** on
+   **VpnHood Partner Connector Configuration**.
+
+   ![The connector listed in System Settings → Addon Modules, with its Activate and Configure buttons](docs/images/01-addon-modules-row.png)
+
+5. Click **Configure** and fill in:
+   - **Hub URL**: already filled in with `https://account.vpnhood.com/`. Leave it as it is
+     unless VpnHood gave you a different address.
    - **API Key**: your partner API Key.
    - **API Secret**: your partner API Secret.
+
+   ![The connector's settings: Hub URL pre-filled, API Key and API Secret fields](docs/images/02-configure-settings.png)
+
+   Leave **Skip TLS Verification** un-ticked — it is for development against a
+   self-signed Hub and must never be enabled on a live store.
 
 Every release also publishes a
 [checksum](https://github.com/vpnhood/VpnHood.WHMCS.Partner/releases/latest/download/vpnhoodpartner.zip.sha256).
@@ -69,6 +79,11 @@ product group, click **Create Missing Product(s)**, and each missing one is crea
 already assigned to the connector module with the right **Upstream Product** selected and the
 same billing cycles the upstream product offers.
 
+![The connector addon page listing upstream products and whether each exists in your WHMCS](docs/images/03-addon-page.png)
+
+The page also shows your **credit balance** with VpnHood and the installed version of both
+halves of the connector.
+
 New products are created **hidden** and priced **0.00**, because only you decide your retail
 price. For each one:
 
@@ -88,6 +103,12 @@ removed, so it is safe to re-run whenever VpnHood offers you something new.
 3. Set your own pricing on the **Pricing** tab, matching the upstream product's cycle(s).
    If you enable a billing cycle the upstream product does not offer, the Module Settings
    tab shows a warning, and orders on that cycle are rejected at purchase time.
+
+![A product's Module Settings tab: Module Name, the Upstream Product dropdown, and the compatibility check](docs/images/04-product-module-settings.png)
+
+The green notice under **Upstream Product** is the compatibility check. It confirms your
+product's Payment Type and billing cycles match the upstream product, and turns into a
+warning when they do not — so you find out here rather than when a customer's order fails.
 
 ## How it works
 
