@@ -43,7 +43,7 @@ function vpnhoodpartnerconfig_config()
         'name'        => 'VpnHood Partner Connector Configuration',
         'description' => 'Connection to your provider\'s VpnHood! Partner Hub. '
             . 'The VpnHood Partner Connector server module reads these settings.',
-        'version'     => '1.0',
+        'version'     => '1.0.0',
         'author'      => 'VpnHood!',
 
         'fields' => [
@@ -452,6 +452,10 @@ function vpnhoodpartnerconfig_output($vars)
         . ' and <strong>API Secret</strong> under <b>System Settings → Addon Modules</b>, then use the sync'
         . ' below to create the matching products.</p>';
 
+    // Before the Hub-error early return: the version is exactly what you want to
+    // quote to support when the Hub is unreachable.
+    echo vpnhoodpartnerconfig_versionLine();
+
     if ($hubError !== '') {
         echo '<div class="alert alert-danger">Could not reach the VpnHood! Partner Hub: '
             . htmlspecialchars($hubError) . '</div>';
@@ -463,6 +467,36 @@ function vpnhoodpartnerconfig_output($vars)
     }
 
     vpnhoodpartnerconfig_renderSyncForm($modulelink, $upstreamProducts);
+}
+
+/**
+ * Installed versions of both halves of the connector.
+ *
+ * WHMCS shows a version for addon modules on its own (from _config), but has no
+ * equivalent display for provisioning modules — so the connector's own version
+ * would otherwise appear nowhere in the admin UI. Read it back from its
+ * whmcs.json, which scripts/set-version.sh keeps in step with the repo tag.
+ */
+function vpnhoodpartnerconfig_versionLine(): string
+{
+    $parts = [];
+
+    $manifest = dirname(__DIR__, 2) . '/servers/vpnhoodpartner/whmcs.json';
+    if (is_readable($manifest)) {
+        // These manifests are sometimes written with a UTF-8 BOM.
+        $raw = preg_replace('/^\xEF\xBB\xBF/', '', (string) file_get_contents($manifest));
+        $json = json_decode($raw, true);
+        if (is_array($json) && isset($json['version'])) {
+            $parts[] = 'connector module <code>'
+                . htmlspecialchars((string) $json['version'], ENT_QUOTES) . '</code>';
+        }
+    }
+
+    $config = vpnhoodpartnerconfig_config();
+    $parts[] = 'this addon <code>'
+        . htmlspecialchars((string) ($config['version'] ?? 'unversioned'), ENT_QUOTES) . '</code>';
+
+    return '<p class="text-muted">Installed versions: ' . implode(' &middot; ', $parts) . '</p>';
 }
 
 /**
