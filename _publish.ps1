@@ -26,6 +26,14 @@
 .PARAMETER Ref
     Branch to release from. Defaults to the branch currently checked out.
 
+.PARAMETER Republish
+    Rebuild and replace the release for the version already in ./VERSION, without
+    bumping. Allowed only while nothing under modules/ or VERSION has changed since
+    that tag — i.e. the zip would be identical. Different code under an unchanged
+    version is the one thing this must never do: WHMCS decides whether to run the
+    addon's _upgrade() by comparing version numbers, so partners already on that
+    version would never receive the change.
+
 .PARAMETER Draft
     Create the release as a draft — nothing is public until you press Publish on GitHub.
 
@@ -51,6 +59,10 @@
     Releases exactly 2.0.0-rc.1, automatically marked as a pre-release.
 
 .EXAMPLE
+    ./_publish.ps1 -Republish
+    Rebuilds and replaces the current release, keeping its version number.
+
+.EXAMPLE
     ./_publish.ps1 -Draft
     Builds and tags as usual, but leaves the release unpublished for review.
 #>
@@ -65,6 +77,7 @@ param(
 
     [string] $Ref,
 
+    [switch] $Republish,
     [switch] $Draft,
     [switch] $PreRelease,
     [switch] $Force,
@@ -141,11 +154,14 @@ try {
     if (-not (Test-Path $versionFile)) { Fail "$versionFile is missing." }
     $declared = (Get-Content $versionFile -Raw).Trim()
 
-    if ($Version) {
+    if ($Republish) {
+        $plan = "$declared — rebuilding and replacing the existing release, no bump"
+    }
+    elseif ($Version) {
         $plan = "$Version (exactly as given)"
         # Caught in the workflow too, but failing here saves a round-trip.
         $existing = Invoke-Native git @('ls-remote', '--tags', 'origin', "refs/tags/v$Version") -AllowFailure
-        if ($existing) { Fail "v$Version is already released. Pick another version." }
+        if ($existing) { Fail "v$Version is already released. Pass -Republish to rebuild it, or pick another version." }
     }
     elseif ($Bump -eq 'none') {
         $plan = "$declared (./VERSION as committed)"
@@ -173,6 +189,7 @@ try {
 
     $dispatch = @('workflow', 'run', $Workflow, '--ref', $Ref, '-f', "bump=$Bump")
     if ($Version) { $dispatch += @('-f', "version=$Version") }
+    $dispatch += @('-f', "republish=$($Republish.IsPresent.ToString().ToLowerInvariant())")
     $dispatch += @('-f', "draft=$($Draft.IsPresent.ToString().ToLowerInvariant())")
     $dispatch += @('-f', "prerelease=$($PreRelease.IsPresent.ToString().ToLowerInvariant())")
 

@@ -21,7 +21,8 @@
 name: Release
 
 run-name: >-
-  Release ${{ inputs.version != '' && inputs.version || format('({0} bump)', inputs.bump) }}
+  ${{ inputs.republish && 'Republish' || 'Release' }}
+  ${{ inputs.version != '' && inputs.version || (inputs.republish && 'the current version' || format('({0} bump)', inputs.bump)) }}
   ${{ inputs.draft && '[draft]' || '' }}
 
 on:
@@ -37,6 +38,11 @@ on:
         description: "Exact version to release (MAJOR.MINOR.PATCH[-prerelease]). Overrides 'bump'. Leave empty unless you need a specific number."
         required: false
         type: string
+      republish:
+        description: "Rebuild and replace an already-published release, keeping its version. Ignores 'bump'. Only allowed when the tag already points at the commit being released."
+        required: false
+        type: boolean
+        default: false
       draft:
         description: "Publish as a draft — the release is created but stays invisible until you press Publish."
         required: false
@@ -96,6 +102,7 @@ jobs:
         env:
           INPUT_VERSION: ${{ inputs.version }}
           BUMP: ${{ inputs.bump }}
+          REPUBLISH: ${{ inputs.republish }}
           # SemVer with an optional pre-release tail (1.5.0-rc.1). No build metadata:
           # PHP's version_compare() cannot order it, and that is what WHMCS uses to
           # decide whether to run the addon's _upgrade() routine on a partner's install.
@@ -117,6 +124,10 @@ jobs:
           if [ -n "$INPUT_VERSION" ]; then
             NEXT="$INPUT_VERSION"
             BASIS="explicit input"
+          elif [ "$REPUBLISH" = "true" ]; then
+            # Republishing is by definition not a new version.
+            NEXT="$DECLARED"
+            BASIS="./VERSION — republishing"
           elif [ -z "$LATEST" ]; then
             # Nothing has ever shipped, so there is nothing to bump from: the first
             # release is the number the repo already declares.
@@ -150,9 +161,39 @@ jobs:
           fi
 
           # A shipped version is immutable: partners have that exact zip.
+          TAG_EXISTS=false
           if git rev-parse -q --verify "refs/tags/v$NEXT" >/dev/null; then
-            echo "::error::v$NEXT is already released — bump instead of overwriting it"
-            exit 1
+            if [ "$REPUBLISH" != "true" ]; then
+              echo "::error::v$NEXT is already released — bump instead of overwriting it"
+              exit 1
+            fi
+            # Republishing may rebuild a version, never redefine one — so what has to
+            # be unchanged is what SHIPS, not the commit. Tooling, docs and workflow
+            # edits are not in the zip and cannot affect it; a change under modules/ or
+            # VERSION can.
+            #
+            # This matters more for a WHMCS module than for most software: the version
+            # IS the upgrade trigger. A partner already on v$NEXT would never receive
+            # different v$NEXT content, because WHMCS compares the number and would
+            # never run _upgrade(). Two installs, same version, different code, no
+            # signal to anyone. Bump instead — that is what the number is for.
+            TAGGED="$(git rev-parse "refs/tags/v$NEXT^{commit}")"
+            HEAD_SHA="$(git rev-parse HEAD)"
+            if ! git diff --quiet "$TAGGED" "$HEAD_SHA" -- modules VERSION; then
+              echo "::error::modules/ or VERSION changed since v$NEXT was tagged, so republishing would put different code under the same version. WHMCS would never run _upgrade() for partners already on v$NEXT. Bump to a new version instead."
+              git diff --stat "$TAGGED" "$HEAD_SHA" -- modules VERSION
+              exit 1
+            fi
+
+            # Identical payload, so the existing tag still marks a commit that builds
+            # this exact zip. Leave it where it is rather than moving a shipped tag.
+            TAG_EXISTS=true
+            if [ "$TAGGED" = "$HEAD_SHA" ]; then
+              echo "Republishing v$NEXT at $HEAD_SHA."
+            else
+              echo "Republishing v$NEXT: HEAD is $HEAD_SHA, but nothing under modules/ or VERSION"
+              echo "has changed since $TAGGED, so the zip is identical. Tag stays put."
+            fi
           fi
           # Going backwards is legitimate on a hotfix branch, but is much more often a
           # reverted bump commit, so say so rather than silently shipping it.
@@ -182,6 +223,7 @@ jobs:
             echo "asset=$MODULE.zip"
             echo "previous=$LATEST"
             echo "prerelease=$PRE"
+            echo "tag_exists=$TAG_EXISTS"
           } >> "$GITHUB_OUTPUT"
 
       - name: Lint the PHP that ships in the zip
@@ -224,6 +266,7 @@ jobs:
           done
 
       - name: Tag the release commit
+        if: steps.v.outputs.tag_exists != 'true'
         env:
           TAG: ${{ steps.v.outputs.tag }}
         run: |
@@ -333,6 +376,15 @@ jobs:
           PRERELEASE: ${{ steps.v.outputs.prerelease }}
         run: |
           set -euo pipefail
+
+          # Replacing, not editing: deleting first means the new release cannot inherit
+          # a stale asset from the old one under a name this build no longer produces.
+          # Without --cleanup-tag, so the tag we just verified stays exactly as it is.
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Deleting the existing $TAG release to replace it."
+            gh release delete "$TAG" --yes
+          fi
+
           args=(
             "$TAG"
             "$ASSET"
@@ -356,7 +408,7 @@ jobs:
           REPO: ${{ github.repository }}
         run: |
           {
-            echo "## Released $TAG"
+            echo "## ${{ inputs.republish && 'Republished' || 'Released' }} $TAG"
             echo
             echo "| | |"
             echo "|---|---|"
