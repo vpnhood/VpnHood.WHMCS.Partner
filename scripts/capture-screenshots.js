@@ -35,6 +35,15 @@ const PRODUCT_ID = process.env.WHMCS_PRODUCT_ID || '';
 // the screenshot shows a partner what they will actually see.
 const DEFAULT_HUB_URL = 'https://account.vpnhood.com/';
 
+// The install being captured may be running an older build than the repo, whose Hub URL
+// field description still shows a stale example address. Render the description the
+// SHIPPED module has, so the screenshot documents the version being released rather
+// than whatever happens to be deployed on the capture source.
+//
+// Keep this identical to the 'Description' of the HubUrl field in
+// modules/addons/vpnhoodpartnerconfig/vpnhoodpartnerconfig.php.
+const HUB_URL_DESCRIPTION = "Your provider's WHMCS base URL.";
+
 const PLACEHOLDERS = [
   ['[vpnhoodpartnerconfig][HubUrl]', DEFAULT_HUB_URL],
   ['[vpnhoodpartnerconfig][ApiKey]', 'your-api-key'],
@@ -46,7 +55,14 @@ const PLACEHOLDERS = [
 ];
 
 async function redact(page) {
-  await page.evaluate((pairs) => {
+  await page.evaluate(({ pairs, hubDescription }) => {
+    // Bring an older deployed build's field description up to what the repo ships.
+    // Matched on the stale example address it is the only thing carrying.
+    const descWalker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    for (let n = descWalker.nextNode(); n; n = descWalker.nextNode()) {
+      if (/yourprovider\.com/i.test(n.nodeValue)) n.nodeValue = hubDescription;
+    }
+
     for (const [frag, val] of pairs) {
       document.querySelectorAll('input,textarea').forEach((el) => {
         if ((el.name || '').includes(frag)) {
@@ -84,7 +100,7 @@ async function redact(page) {
     document.querySelectorAll('.global-admin-warning, .alert-warning').forEach((el) => {
       if (/Hooks Debug Mode/i.test(el.textContent || '')) el.remove();
     });
-  }, PLACEHOLDERS);
+  }, { pairs: PLACEHOLDERS, hubDescription: HUB_URL_DESCRIPTION });
 }
 
 async function assertClean(page, selector, label) {
@@ -114,6 +130,10 @@ async function assertClean(page, selector, label) {
         .filter(m => !/^100\.00/.test(m)).forEach(m => bad.push('balance:' + m));
     }
     if (/whmcs-dev|localhost|127\.0\.0\.1/i.test(hay)) bad.push('non-public host in frame');
+    // Placeholder addresses that no longer exist in the module's own text. If one is
+    // still in frame, the deployed build is older than the repo AND the substitution
+    // above failed to catch it.
+    if (/yourprovider\.com/i.test(hay)) bad.push('stale example URL in frame');
     return bad;
   }, selector);
 
