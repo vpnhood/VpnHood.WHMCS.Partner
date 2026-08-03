@@ -255,6 +255,20 @@ The workflow refuses to release if `set-version.sh --check` finds drift, if the 
 does not lint, or if the tag already exists — a shipped version is immutable, because
 partners already have that exact zip.
 
+`./_publish.ps1 -Republish` rebuilds and replaces the release for the version already
+in `VERSION`, without bumping — for when the release itself needs re-cutting (bad
+upload, changed release metadata) rather than the code. It is allowed **only while
+nothing under `modules/` or `VERSION` has changed since that tag**, so the zip it
+produces is identical; edits to docs, workflows or `_publish.ps1` never reach the zip
+and so never block it. The existing tag is left where it is, and the old release is
+deleted and recreated rather than edited.
+
+Shipping *different* code under an unchanged version is the one thing releasing must
+never do here, and the reason is WHMCS-specific: the version is the upgrade trigger.
+A partner already on that version would never receive the change, because WHMCS
+compares the number and would never call `vpnhoodpartnerconfig_upgrade()`. Two installs
+would sit on the same version running different code, with nothing to reveal it. Bump.
+
 The only permission it needs is `contents: write`, using the automatic `GITHUB_TOKEN`;
 there is no secret to configure. If `main` is ever protected against direct pushes,
 that bump commit is what will fail — allow `github-actions[bot]` to bypass, or release
