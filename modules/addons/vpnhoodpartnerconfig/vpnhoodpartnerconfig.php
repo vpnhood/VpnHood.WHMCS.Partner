@@ -91,6 +91,37 @@ function vpnhoodpartnerconfig_deactivate()
 {
 }
 
+/**
+ * WHMCS upgrade routine — the migration point for a new release.
+ *
+ * WHMCS records this addon's version in `tbladdonmodules` and calls this function
+ * when the version in _config() is NEWER (PHP version_compare) than the recorded
+ * one — i.e. once, after a partner extracts a release zip over their install. It is
+ * the only hook that runs on an upgrade, so anything a release must fix up belongs
+ * here. Settings and the partner's products/services are untouched by an upgrade.
+ *
+ * Two rules, because a partner can jump several versions at once and WHMCS offers
+ * no rollback:
+ *   1. Guard every step with version_compare against $from. Never assume the
+ *      install is coming from the immediately previous release.
+ *   2. Make every step idempotent — if an upgrade dies half way, the next admin
+ *      page load re-runs it from the same $from.
+ *
+ * Note that extracting the zip only ever ADDS and OVERWRITES files: a module file
+ * dropped in a release stays on disk until something deletes it. When a release
+ * removes a file, unlink it here (guarded as above) or partners keep dead code.
+ *
+ * @param array $vars 'version' — the version currently recorded for this install
+ */
+function vpnhoodpartnerconfig_upgrade($vars)
+{
+    $from = isset($vars['version']) ? (string) $vars['version'] : '0.0.0';
+
+    // if (version_compare($from, '1.1.0', '<')) { ... }
+
+    unset($from); // nothing to migrate yet — 1.0.0 is the first public release
+}
+
 // ---------------------------------------------------------------- CSRF helpers
 
 /**
@@ -479,7 +510,9 @@ function vpnhoodpartnerconfig_output($vars)
  */
 function vpnhoodpartnerconfig_versionLine(): string
 {
-    $parts = [];
+    $config    = vpnhoodpartnerconfig_config();
+    $addon     = (string) ($config['version'] ?? '');
+    $connector = '';
 
     $manifest = dirname(__DIR__, 2) . '/servers/vpnhoodpartner/whmcs.json';
     if (is_readable($manifest)) {
@@ -487,16 +520,31 @@ function vpnhoodpartnerconfig_versionLine(): string
         $raw = preg_replace('/^\xEF\xBB\xBF/', '', (string) file_get_contents($manifest));
         $json = json_decode($raw, true);
         if (is_array($json) && isset($json['version'])) {
-            $parts[] = 'connector module <code>'
-                . htmlspecialchars((string) $json['version'], ENT_QUOTES) . '</code>';
+            $connector = (string) $json['version'];
         }
     }
 
-    $config = vpnhoodpartnerconfig_config();
+    $parts = [];
+    if ($connector !== '') {
+        $parts[] = 'connector module <code>' . htmlspecialchars($connector, ENT_QUOTES) . '</code>';
+    }
     $parts[] = 'this addon <code>'
-        . htmlspecialchars((string) ($config['version'] ?? 'unversioned'), ENT_QUOTES) . '</code>';
+        . htmlspecialchars($addon !== '' ? $addon : 'unversioned', ENT_QUOTES) . '</code>';
 
-    return '<p class="text-muted">Installed versions: ' . implode(' &middot; ', $parts) . '</p>';
+    $line = '<p class="text-muted">Installed versions: ' . implode(' &middot; ', $parts) . '</p>';
+
+    // Both halves ship in one zip carrying one version, and are only ever tested
+    // together. Different numbers mean the last release was extracted over only part
+    // of the install — worth saying out loud, since nothing else would report it.
+    if ($connector !== '' && $addon !== '' && $connector !== $addon) {
+        $line .= '<div class="alert alert-warning">The connector module (<code>'
+            . htmlspecialchars($connector, ENT_QUOTES) . '</code>) and this addon (<code>'
+            . htmlspecialchars($addon, ENT_QUOTES) . '</code>) are at different versions. '
+            . 'They ship together in a single zip — re-extract the latest release at the root '
+            . 'of your WHMCS installation so both halves are updated.</div>';
+    }
+
+    return $line;
 }
 
 /**

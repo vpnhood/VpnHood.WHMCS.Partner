@@ -198,6 +198,74 @@ unsupported billing cycle.
 - **Errors:** always `logModuleCall('vpnhoodpartner', ...)` and return a `VpnHood Partner
   Error: ...` string from lifecycle hooks (WHMCS shows it in the admin/module log).
 
+## Versioning
+
+One number covers the whole repo. Both halves of the connector ship in one zip, are
+released together and are only ever tested together, so they always carry the same
+version — a partner running mismatched halves is running an untested combination, and
+the addon page says so.
+
+`VERSION` at the repo root is the source of truth; `scripts/set-version.sh` copies it
+into the two places that ship it. SemVer, optionally with a pre-release tail
+(`1.5.0-rc.1`) — but never build metadata (`+sha`), because PHP's `version_compare()`
+cannot order it.
+
+- **`modules/addons/vpnhoodpartnerconfig/vpnhoodpartnerconfig.php`** — the `'version'`
+  key of `_config()`. This one is **functional**: WHMCS records it in `tbladdonmodules`
+  and calls `vpnhoodpartnerconfig_upgrade()` when the file on disk declares a newer one,
+  so this number is what triggers a partner's upgrade.
+- **`modules/servers/vpnhoodpartner/whmcs.json`** — the `"version"` key. WHMCS has no
+  native version display for provisioning modules, so the addon page reads it back
+  (`vpnhoodpartnerconfig_versionLine`) and compares it with the addon's own.
+
+Because the addon's number *drives behaviour on a partner's install*, the version has
+to be correct in the committed source at the commit it describes. That is why it is a
+file in the repo and not something derived from the git tag: a tag cannot carry a
+number into the zip. The tag mirrors `VERSION`; it never defines it.
+
+`vpnhoodpartnerconfig_upgrade($vars)` is the only hook that runs on an upgrade. Guard
+every migration with `version_compare($vars['version'], 'x.y.z', '<')` and make it
+idempotent — partners jump several versions at once, and a failed upgrade is re-run on
+the next admin page load. **Extracting the zip only adds and overwrites**: when a
+release deletes a module file, `unlink()` it there or partners keep running dead code.
+
+## Releasing
+
+`.github/workflows/release.yml`, run by hand — nothing releases on push.
+
+```powershell
+./_publish.ps1              # patch bump, tag, release
+./_publish.ps1 minor        # or major / none
+./_publish.ps1 -Version 2.0.0-rc.1   # exact number; auto-marked as a pre-release
+./_publish.ps1 -Draft       # build and tag, but leave the release unpublished
+```
+
+`_publish.ps1` checks your tree matches `origin` (the zip is built from the pushed
+branch, so uncommitted work would silently not be in it), dispatches the workflow and
+follows it. Or use **Actions → Release → Run workflow**.
+
+**The bump happens in CI, never locally.** The workflow increments `VERSION`, runs
+`set-version.sh`, commits, tags `v<version>` and publishes. Two people releasing at
+once cannot collide: `concurrency: group: release` serialises the runs, so the second
+checks out the branch after the first has pushed its bump and reads the incremented
+number. `patch` is the default; `minor`/`major` are a judgement about what changed and
+stay a human decision.
+
+The workflow refuses to release if `set-version.sh --check` finds drift, if the PHP
+does not lint, or if the tag already exists — a shipped version is immutable, because
+partners already have that exact zip.
+
+The only permission it needs is `contents: write`, using the automatic `GITHUB_TOKEN`;
+there is no secret to configure. If `main` is ever protected against direct pushes,
+that bump commit is what will fail — allow `github-actions[bot]` to bypass, or release
+from an unprotected branch.
+
+The asset is `vpnhoodpartner-<version>.zip`, containing **only** `modules/` (plus a
+copy of `LICENSE` in each module folder). Everything in it lands in the partner's WHMCS
+root, so `docs/`, `scripts/`, `tests/` and `.github/` are deliberately absent — the
+workflow fails the build if any path outside `modules/` gets in. It is byte-stable for
+a given commit, and published with a `.sha256` alongside.
+
 ## Conventions & testing
 
 - PHP 7.4+; no PHP toolchain/lint is configured in this environment — verify on a live WHMCS.

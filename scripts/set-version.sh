@@ -9,16 +9,21 @@
 # Usage:
 #   scripts/set-version.sh            # apply VERSION to all modules
 #   scripts/set-version.sh 1.4.2      # set VERSION to 1.4.2, then apply
+#   scripts/set-version.sh 1.5.0-rc.1 # pre-release versions are allowed too
 #   scripts/set-version.sh --check    # verify modules match VERSION (exit 1 if not)
 #
 # Where the version lives, and why:
 #   - Addon modules  -> the 'version' key of <module>_config(). WHMCS reads this
-#     natively and shows it in System Settings -> Addon Modules.
+#     natively: it shows it in System Settings -> Addon Modules, records it in
+#     tbladdonmodules on activation, and calls <module>_upgrade() when the file on
+#     disk declares a NEWER version than the one recorded. That comparison is PHP's
+#     version_compare(), which is SemVer-aware — so 1.5.0-rc.1 correctly sorts
+#     before 1.5.0, and a bump here is what triggers a partner's upgrade routine.
 #   - Server modules -> the "version" key of whmcs.json. WHMCS has NO native
 #     version display for provisioning modules, so the vpnhoodpartnerconfig admin
 #     page reads this file back and shows it (see vpnhoodpartnerconfig_output).
 #
-# Run by .github/workflows/release.yml on every push to main, but it is an
+# Run by .github/workflows/release.yml when a release is cut, but it is an
 # ordinary script — run it locally any time to re-sync.
 
 set -euo pipefail
@@ -38,8 +43,11 @@ fi
 [ -f "$VERSION_FILE" ] || { echo "!! missing $VERSION_FILE" >&2; exit 1; }
 VERSION="$(tr -d ' \t\r\n' < "$VERSION_FILE")"
 
-if ! printf '%s' "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
-  echo "!! VERSION must be MAJOR.MINOR.PATCH, got '$VERSION'" >&2
+# SemVer, optionally with a pre-release tail (1.5.0-rc.1). Build metadata (+sha) is
+# deliberately not allowed: PHP's version_compare() does not understand it, so WHMCS
+# could not order two such versions when deciding whether to run _upgrade().
+if ! printf '%s' "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+  echo "!! VERSION must be MAJOR.MINOR.PATCH[-prerelease], got '$VERSION'" >&2
   exit 1
 fi
 

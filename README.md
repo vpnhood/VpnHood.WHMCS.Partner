@@ -1,5 +1,7 @@
 # VpnHood! Partner Connector (WHMCS)
 
+[![Latest release](https://img.shields.io/github/v/release/vpnhood/VpnHood.WHMCS.Partner?label=download&sort=semver)](https://github.com/vpnhood/VpnHood.WHMCS.Partner/releases/latest)
+
 Resell **VpnHood** VPN keys from **your own WHMCS** at **your own prices**, without
 running any VPN infrastructure and without writing any code.
 
@@ -28,16 +30,32 @@ VpnHood will give you:
 
 ## Installation
 
-1. Create a zip file of the `modules` folder (it contains `servers/vpnhoodpartner/` and
-   `addons/vpnhoodpartnerconfig/`).
-2. Upload the zip to the **root of your WHMCS installation** and extract it there — it merges
-   into the existing `modules/` directory.
+1. Download **`vpnhoodpartner-<version>.zip`** from the
+   [latest release](https://github.com/vpnhood/VpnHood.WHMCS.Partner/releases/latest).
+2. Upload the zip to the **root of your WHMCS installation** and extract it there. It contains a
+   single `modules/` folder (`servers/vpnhoodpartner/` and `addons/vpnhoodpartnerconfig/`) that
+   merges into your existing one.
 3. **Delete the zip file** after extracting it.
 4. In WHMCS Admin go to **System Settings → Addon Modules**, activate **VpnHood Partner
    Connector Configuration**, then click **Configure** and enter:
    - **Hub URL**: the VpnHood! Partner Hub URL.
    - **API Key**: your partner API Key.
    - **API Secret**: your partner API Secret.
+
+Every release also publishes a `.sha256` file. To check the download before you upload it:
+
+```sh
+sha256sum -c vpnhoodpartner-<version>.zip.sha256
+```
+
+## Updating
+
+Download the new zip and repeat steps 1–3. Extracting over the top replaces the module files and
+leaves your settings, products and services untouched.
+
+Then open **Addons → VpnHood Partner Connector Configuration** once. WHMCS applies any upgrade
+the release needs on that page load, and the page reports the installed version of both halves —
+if they disagree, the zip was only partly extracted and you should extract it again.
 
 ## Product setup
 
