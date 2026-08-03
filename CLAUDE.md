@@ -32,7 +32,13 @@ service properties, and — most importantly — the **upstream Hub API contract
 - **Errors:** `logModuleCall('vpnhoodpartner', ...)` and return a `VpnHood Partner Error: ...`
   string from lifecycle hooks.
 - **Folder naming:** lowercase letters/numbers only (no underscores/spaces).
-- **No build/lint/test tooling** is configured (no PHP CLI in this environment). Verify on a
+- **Never hand-edit a module's version.** The root `VERSION` file is the single source of
+  truth; `scripts/set-version.sh` stamps it into `vpnhoodpartnerconfig` (`_config()`) and
+  `vpnhoodpartner` (`whmcs.json`). `.github/workflows/release.yml` bumps the patch number,
+  tags and releases on every push to main. This repo versions **independently** of the Hub
+  repo — the Hub API contract couples them, not the version number.
+- **No build/lint/test tooling** is configured (no PHP CLI in this environment). The only CI
+  is the release workflow, which versions and tags — it does not build or test. Verify on a
   live WHMCS pair (partner + provider) — see `docs/DEVELOPMENT.md`.
 
 ## Tests
