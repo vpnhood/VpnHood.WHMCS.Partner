@@ -38,6 +38,10 @@
     Capture from a different install.
 #>
 [CmdletBinding()]
+# CredentialsPath is a filesystem path, not a secret — the analyser only flags it
+# because the name contains "Credentials". The password it points at is read into a
+# local, passed to node through the environment, and cleared again below.
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingPlainTextForPassword', 'CredentialsPath')]
 param(
     [string] $Url = 'https://whmcs-dev.vpnhood.com',
     [string] $CredentialsPath,

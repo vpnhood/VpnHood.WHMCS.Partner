@@ -52,14 +52,6 @@ VpnHood will give you:
    Leave **Skip TLS Verification** un-ticked — it is for development against a
    self-signed Hub and must never be enabled on a live store.
 
-Every release also publishes a
-[checksum](https://github.com/vpnhood/VpnHood.WHMCS.Partner/releases/latest/download/vpnhoodpartner.zip.sha256).
-To check the download before you upload it, put both files in the same folder and run:
-
-```sh
-sha256sum -c vpnhoodpartner.zip.sha256
-```
-
 ## Updating
 
 Download the new zip and repeat steps 1–3. Extracting over the top replaces the module files and

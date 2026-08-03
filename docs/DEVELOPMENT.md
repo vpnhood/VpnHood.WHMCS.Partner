@@ -335,6 +335,21 @@ text and reports anything suspicious. Treat that as a safety net, not a substitu
 looking at the images — it has caught a real leak (a credit balance whose label and
 figure live in different DOM nodes) that a glance would have missed.
 
+**The script never writes to the WHMCS it captures.** That matters for one shot in
+particular: `Create Missing Product(s)` only renders when an upstream product has no
+local product yet (`vpnhoodpartnerconfig_renderSyncForm` returns early on "Nothing to
+create"), so on a synced install the button is unreachable. Rather than create, delete
+or repoint products to force that state — which mutates a shared install and leaves real
+data wrong if a run dies half way — the script renders the same markup the module itself
+emits for a missing product. **That markup must mirror `vpnhoodpartnerconfig_renderSyncForm()`**;
+if the function's output changes, change `renderMissingState()` with it, or the
+screenshot will document a UI that no longer exists.
+
+Redaction is deliberately *narrow*. An early version replaced every money-shaped string
+on the page and rewrote the sync blurb's "priced **0.00**" into "100.00 USD" — telling
+partners the opposite of what the module does. Only the credit-balance line is
+neutralised now, and the leak scan checks money only there for the same reason.
+
 The Hub URL placeholder in the script must stay in step with the `Default` of the
 `HubUrl` field in `vpnhoodpartnerconfig.php`, or the screenshot will show partners a
 value their install does not have.
