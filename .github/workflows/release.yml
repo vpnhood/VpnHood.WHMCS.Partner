@@ -69,7 +69,7 @@ jobs:
 
     steps:
       - name: Check out the repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           # Full history + tags: needed to work out the last released version and to
           # let `gh release create --generate-notes` diff against the last release.
