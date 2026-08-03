@@ -50,7 +50,7 @@ service properties, and — most importantly — the **upstream Hub API contract
 
 `./_publish.ps1` (patch bump by default; `minor`/`major`/`-Version x.y.z`/`-Draft`) triggers
 `.github/workflows/release.yml`, which bumps `VERSION`, commits, tags `v<version>`, builds
-`vpnhoodpartner-<version>.zip` (only `modules/`) and publishes the GitHub release. Nothing
+`vpnhoodpartner.zip` (only `modules/`) and publishes the GitHub release. Nothing
 releases on push. Details in `docs/DEVELOPMENT.md` → *Versioning* / *Releasing*.
 
 ## Tests

@@ -260,11 +260,25 @@ there is no secret to configure. If `main` is ever protected against direct push
 that bump commit is what will fail — allow `github-actions[bot]` to bypass, or release
 from an unprotected branch.
 
-The asset is `vpnhoodpartner-<version>.zip`, containing **only** `modules/` (plus a
-copy of `LICENSE` in each module folder). Everything in it lands in the partner's WHMCS
-root, so `docs/`, `scripts/`, `tests/` and `.github/` are deliberately absent — the
-workflow fails the build if any path outside `modules/` gets in. It is byte-stable for
-a given commit, and published with a `.sha256` alongside.
+The asset contains **only** `modules/` (plus a copy of `LICENSE` in each module folder).
+Everything in it lands in the partner's WHMCS root, so `docs/`, `scripts/`, `tests/` and
+`.github/` are deliberately absent — the workflow fails the build if any path outside
+`modules/` gets in. It is byte-stable for a given commit, and published with a `.sha256`
+alongside.
+
+It is named `vpnhoodpartner.zip`, with no version in the filename, so that
+
+```text
+https://github.com/vpnhood/VpnHood.WHMCS.Partner/releases/latest/download/vpnhoodpartner.zip
+```
+
+is a permanent link the README can point straight at. The version is in the release
+title, in the tag, and inside the zip where WHMCS reads it — the one place it has to be.
+
+The release body is deliberately minimal: what the release is, and its checksum.
+Install steps are **not** repeated there. Two copies of the instructions drift, and the
+copy on the release page is the one nobody remembers to update; the README is the single
+place installing is documented.
 
 ## Conventions & testing
 
