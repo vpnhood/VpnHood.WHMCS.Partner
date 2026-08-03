@@ -57,12 +57,21 @@ async function redact(page) {
       });
     }
 
-    // Money -> a neutral example. Walk TEXT NODES: the "Credit balance:" label and the
-    // figure live in different nodes, so keying off the label misses the number.
-    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    // The credit balance -> a neutral example. Scope this to the balance line only.
+    // Replacing every money-shaped string on the page corrupts real documentation: the
+    // sync blurb states products are created "priced 0.00", and a blanket rule rewrote
+    // that to "100.00 USD" — telling partners the exact opposite of what happens.
+    // Walk TEXT NODES within that one element, because the "Credit balance:" label and
+    // the figure itself live in different nodes.
     const money = /\b[\d,]+\.\d{2}(\s*[A-Z]{3})?\b/;
-    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
-      if (money.test(n.nodeValue)) n.nodeValue = n.nodeValue.replace(money, '100.00 USD');
+    const balanceEl = [...document.querySelectorAll('p,div,span,li,td,h1,h2,h3,h4')]
+      .filter(e => /Credit balance/i.test(e.textContent || ''))
+      .sort((a, b) => (a.textContent || '').length - (b.textContent || '').length)[0];
+    if (balanceEl) {
+      const walker = document.createTreeWalker(balanceEl, NodeFilter.SHOW_TEXT);
+      for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+        if (money.test(n.nodeValue)) n.nodeValue = n.nodeValue.replace(money, '100.00 USD');
+      }
     }
 
     // A dev install runs with Skip TLS Verification on. Publishing it ticked would show
@@ -94,8 +103,16 @@ async function assertClean(page, selector, label) {
     (hay.match(/\b[A-Za-z0-9_-]{24,}\b/g) || [])
       .filter(t => !SAFE.test(t))
       .forEach(t => bad.push('token:' + t.slice(0, 12) + '…'));
-    (hay.match(/\b[\d,]+\.\d{2}(\s*[A-Z]{3})?\b/g) || [])
-      .filter(m => !/^100\.00/.test(m)).forEach(m => bad.push('money:' + m));
+    // Money is only sensitive on the credit-balance line. Elsewhere it is ordinary
+    // copy — the sync blurb legitimately says products are created "priced 0.00" — so
+    // flagging every figure on the page just trains you to ignore the warnings.
+    const balanceEl = [...el.querySelectorAll('p,div,span,li,td')]
+      .filter(e => /Credit balance/i.test(e.textContent || ''))
+      .sort((a, b) => (a.textContent || '').length - (b.textContent || '').length)[0];
+    if (balanceEl) {
+      ((balanceEl.textContent || '').match(/\b[\d,]+\.\d{2}(\s*[A-Z]{3})?\b/g) || [])
+        .filter(m => !/^100\.00/.test(m)).forEach(m => bad.push('balance:' + m));
+    }
     if (/whmcs-dev|localhost|127\.0\.0\.1/i.test(hay)) bad.push('non-public host in frame');
     return bad;
   }, selector);
@@ -115,6 +132,84 @@ async function shoot(page, selector, file, label) {
   await el.screenshot({ path: path.join(OUT, file) });
   console.log(`    +   ${file} (${Math.round(fs.statSync(path.join(OUT, file)).size / 1024)} KB)`);
   return clean;
+}
+
+// ------------------------------------------------- rendering the "missing" state
+//
+// The "Create Missing Product(s)" button only renders when some upstream product has no
+// local product yet — vpnhoodpartnerconfig_renderSyncForm() returns early on "Nothing
+// to create". On a fully synced install the button is therefore unreachable.
+//
+// This script is READ ONLY against the WHMCS it captures. It never creates, deletes or
+// repoints a product to force that state: doing so mutates a shared install, and a run
+// that dies half way leaves real data wrong. Instead the same markup the module itself
+// emits for a missing product is rendered into the page before the screenshot.
+//
+// The markup below therefore has to mirror vpnhoodpartnerconfig_renderSyncForm(). If
+// that function's output changes, change this with it, or the screenshot will document
+// a UI that no longer exists.
+async function renderMissingState(page) {
+  return page.evaluate(() => {
+    const table = [...document.querySelectorAll('table')]
+      .find(t => /Upstream Product/i.test(t.innerText));
+    if (!table) return 'no upstream product table';
+    const rows = [...table.querySelectorAll('tbody tr')];
+    if (!rows.length) return 'no product rows';
+
+    // Show the last product as not-yet-created: ticked checkbox + "Not created yet".
+    const row = rows[rows.length - 1];
+    const cells = row.querySelectorAll('td');
+    if (cells.length < 5) return 'unexpected row shape';
+    const ref = (cells[1].textContent.match(/\(ref ([^)]+)\)/) || [])[1] || '';
+    cells[0].innerHTML = `<input type="checkbox" name="refs[]" value="${ref}" checked>`;
+    cells[4].innerHTML = '<span class="label label-info">Not created yet</span>';
+
+    const form = table.closest('form');
+    if (!form) return 'products table is not inside the sync form';
+
+    // The "Nothing to create" notice is what stands where the controls belong.
+    form.querySelectorAll('.alert-success').forEach((el) => {
+      if (/Nothing to create/i.test(el.textContent || '')) el.remove();
+    });
+
+    const controls = document.createElement('div');
+    controls.className = 'form-inline';
+    controls.style.marginBottom = '10px';
+    controls.innerHTML =
+      '<label style="margin-right:6px">Create in product group</label>'
+      + '<select name="gid" class="form-control" required>'
+      + '<option value="">— Select a group —</option></select> '
+      + '<button type="submit" class="btn btn-primary">Create 1 Missing Product(s)</button>';
+
+    const note = document.createElement('p');
+    note.className = 'text-muted';
+    note.innerHTML =
+      'New products are created <b>hidden</b>, assigned to the <b>VpnHood Partner Connector</b>'
+      + ' module with the correct Upstream Product already selected, and priced <b>0.00</b> on the'
+      + ' cycles the upstream offers — your provider never dictates your retail price. Set your'
+      + " price on each product's <b>Pricing</b> tab, then un-hide it. Existing products are never"
+      + ' modified or removed.';
+
+    form.appendChild(controls);
+    form.appendChild(note);
+    return null;
+  });
+}
+
+async function openProductModuleTab(page, id) {
+  await page.goto(`${BASE}/admin/configproducts.php?action=edit&id=${id}`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(1200);
+  if (await passSudo(page)) {
+    await page.goto(`${BASE}/admin/configproducts.php?action=edit&id=${id}`, { waitUntil: 'networkidle' });
+    await page.waitForTimeout(1800);
+  }
+  // The Module Settings pane only populates once its tab is opened.
+  await page.evaluate(() => {
+    const a = [...document.querySelectorAll('a')]
+      .find(x => /Module Settings/i.test(x.textContent) && (x.getAttribute('href') || '').startsWith('#'));
+    if (a) a.click();
+  });
+  await page.waitForTimeout(2500);
 }
 
 // WHMCS puts a second password prompt in front of some admin areas (Products/Services
@@ -198,21 +293,44 @@ async function passSudo(page) {
 
   // ---- 3. The addon's own page
   console.log('3. Connector addon page');
-  await page.goto(`${BASE}/admin/addonmodules.php?module=vpnhoodpartnerconfig`, { waitUntil: 'networkidle' });
-  await page.waitForTimeout(2500);
+  const gotoAddon = async () => {
+    await page.goto(`${BASE}/admin/addonmodules.php?module=vpnhoodpartnerconfig`, { waitUntil: 'networkidle' });
+    await page.waitForTimeout(2500);
+  };
+  const nothingToCreate = () =>
+    page.evaluate(() => /Nothing to create/i.test(document.body.innerText));
+
+  await gotoAddon();
   const productId = PRODUCT_ID || await page.evaluate(() => {
     const a = [...document.querySelectorAll('a')]
       .find(x => /configproducts\.php\?action=edit&id=\d+/.test(x.getAttribute('href') || ''));
     return a ? a.getAttribute('href').match(/id=(\d+)/)[1] : '';
   });
-  await redact(page);
-  await page.evaluate(() => {
-    const h = [...document.querySelectorAll('h1,h2,h3')].find(x => /Upstream Products/i.test(x.textContent));
-    const el = h ? (h.closest('div') || h.parentElement) : document.querySelector('#contentarea');
-    if (el) { el.id = 'shot-addon'; el.scrollIntoView({ block: 'center' }); }
-  });
-  await page.waitForTimeout(400);
-  allClean &= await shoot(page, '#shot-addon', '03-addon-page.png', 'addon page');
+
+  const captureAddon = async () => {
+    await redact(page);
+    await page.evaluate(() => {
+      const h = [...document.querySelectorAll('h1,h2,h3')].find(x => /Upstream Products/i.test(x.textContent));
+      const el = h ? (h.closest('div') || h.parentElement) : document.querySelector('#contentarea');
+      if (el) { el.id = 'shot-addon'; el.scrollIntoView({ block: 'center' }); }
+    });
+    await page.waitForTimeout(400);
+    return shoot(page, '#shot-addon', '03-addon-page.png', 'addon page');
+  };
+
+  if (await nothingToCreate()) {
+    // Fully synced, so the sync controls are not on the page. Render them the way the
+    // module does for a missing product — no data is touched to bring that state about.
+    const problem = await renderMissingState(page);
+    if (problem) {
+      console.log(`    !! could not render the missing-product state: ${problem}`);
+      console.log('       capturing the page as-is; the Create button will not be in the shot');
+      allClean = false;
+    } else {
+      console.log('    (rendered the "1 missing product" state — install untouched)');
+    }
+  }
+  allClean &= await captureAddon();
 
   // ---- 4. A product's Module Settings tab
   console.log(`4. Product Module Settings tab (product ${productId || '?'})`);
