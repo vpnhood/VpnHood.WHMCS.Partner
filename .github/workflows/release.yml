@@ -179,9 +179,9 @@ jobs:
             # signal to anyone. Bump instead — that is what the number is for.
             TAGGED="$(git rev-parse "refs/tags/v$NEXT^{commit}")"
             HEAD_SHA="$(git rev-parse HEAD)"
-            if ! git diff --quiet "$TAGGED" "$HEAD_SHA" -- modules VERSION; then
-              echo "::error::modules/ or VERSION changed since v$NEXT was tagged, so republishing would put different code under the same version. WHMCS would never run _upgrade() for partners already on v$NEXT. Bump to a new version instead."
-              git diff --stat "$TAGGED" "$HEAD_SHA" -- modules VERSION
+            if ! git diff --quiet "$TAGGED" "$HEAD_SHA" -- modules VERSION IAP_VERSION; then
+              echo "::error::modules/, VERSION or IAP_VERSION changed since v$NEXT was tagged, so republishing would put different code under the same version. WHMCS would never run _upgrade() for partners already on v$NEXT. Bump to a new version instead."
+              git diff --stat "$TAGGED" "$HEAD_SHA" -- modules VERSION IAP_VERSION
               exit 1
             fi
 
@@ -277,36 +277,51 @@ jobs:
       - name: Build the partner zip
         env:
           ASSET: ${{ steps.v.outputs.asset }}
+          # VpnHood.WHMCS.Iap is public, so the default token suffices; IAP_REPO_TOKEN
+          # remains as an escape hatch should it ever go private again.
+          GH_TOKEN: ${{ secrets.IAP_REPO_TOKEN || github.token }}
         run: |
           set -euo pipefail
           STAGE="$RUNNER_TEMP/pkg"
           rm -rf "$STAGE" && mkdir -p "$STAGE"
 
-          # The zip holds ONLY `modules/`, because a partner extracts it at the root of
-          # their WHMCS install: every path in it is one they are agreeing to merge in.
-          # Repo-only material (docs/, scripts/, tests/, .github/) is deliberately absent.
+          # The zip holds ONLY `modules/` and `includes/`, because a partner extracts it
+          # at the root of their WHMCS install: every path in it is one they are agreeing
+          # to merge in. Repo-only material (docs/, scripts/, tests/, .github/) is absent.
           cp -R modules "$STAGE/modules"
 
           # LGPL: the licence travels with the code we distribute, inside each module.
           cp LICENSE "$STAGE/modules/servers/vpnhoodpartner/LICENSE"
           cp LICENSE "$STAGE/modules/addons/vpnhoodpartnerconfig/LICENSE"
 
+          # Bundle the vpnhoodiap module VERBATIM from its own pinned release. Its
+          # version stream is deliberately independent (IAP_VERSION is the pin): WHMCS
+          # keys _upgrade() on the version inside vpnhoodiap_config(), so the same code
+          # must carry the same number in the hub package, this package, and standalone
+          # installs. Never restamp it here.
+          IAP_PIN="$(tr -d ' \t\r\n' < IAP_VERSION)"
+          echo "Bundling vpnhoodiap v$IAP_PIN"
+          gh release download "v$IAP_PIN" --repo vpnhood/VpnHood.WHMCS.Iap \
+            --pattern 'vpnhoodiap.zip' --dir "$RUNNER_TEMP"
+          unzip -q -o "$RUNNER_TEMP/vpnhoodiap.zip" -d "$STAGE"
+
           find "$STAGE" \( -name '*.bak' -o -name '.DS_Store' -o -name 'Thumbs.db' \) -delete
 
           # zip records each file's mtime, and a fresh checkout stamps those with the
           # time the runner cloned — so without this, rebuilding identical content
           # produces a different archive every single run. Date everything from the last
-          # commit that touched what actually ships, which means a rebuild that changed
-          # only docs or tooling still reproduces the same bytes. That is exactly the
+          # commit that touched what actually ships (IAP_VERSION included: bumping the
+          # bundled module IS a payload change), which means a rebuild that changed only
+          # docs or tooling still reproduces the same bytes. That is exactly the
           # condition `republish` allows, so this is what makes its promise true.
-          SOURCE_DATE="$(git log -1 --format=%cI -- modules VERSION)"
+          SOURCE_DATE="$(git log -1 --format=%cI -- modules VERSION IAP_VERSION)"
           [ -n "$SOURCE_DATE" ] || { echo "::error::could not date modules/"; exit 1; }
           echo "Payload last changed $SOURCE_DATE — stamping the archive with it."
           find "$STAGE" -exec touch -d "$SOURCE_DATE" {} +
 
           # Sorted input + -X (no uid/gid/extra attrs) does the rest: same payload in,
           # same checksum out.
-          ( cd "$STAGE" && find modules | LC_ALL=C sort | zip -q -X "$GITHUB_WORKSPACE/$ASSET" -@ )
+          ( cd "$STAGE" && find modules includes | LC_ALL=C sort | zip -q -X "$GITHUB_WORKSPACE/$ASSET" -@ )
 
           sha256sum "$ASSET" > "$ASSET.sha256"
           ls -lh "$ASSET"
@@ -326,18 +341,32 @@ jobs:
             modules/servers/vpnhoodpartner/lib/HubClient.php \
             modules/servers/vpnhoodpartner/templates/clientarea.tpl \
             modules/servers/vpnhoodpartner/templates/error.tpl \
-            modules/addons/vpnhoodpartnerconfig/vpnhoodpartnerconfig.php
+            modules/addons/vpnhoodpartnerconfig/vpnhoodpartnerconfig.php \
+            modules/addons/vpnhoodiap/vpnhoodiap.php \
+            modules/addons/vpnhoodiap/api.php \
+            modules/addons/vpnhoodiap/webhook.php \
+            modules/gateways/vpnhoodiappay.php \
+            includes/hooks/vpnhoodiap-suppress-emails.php \
+            includes/hooks/vpnhoodiap-cron.php
           do
             unzip -Z1 "$ASSET" | grep -Fxq "$f" || { echo "::error::$f missing from $ASSET"; exit 1; }
           done
 
-          # Nothing outside modules/ may be in the archive — it lands in the WHMCS root.
-          # (The tree's own root is stored as the entry `modules/`, hence the `|$`.)
-          if unzip -Z1 "$ASSET" | grep -vE '^modules(/|$)' | grep -q .; then
-            echo "::error::$ASSET contains paths outside modules/"
-            unzip -Z1 "$ASSET" | grep -vE '^modules(/|$)'
+          # Nothing outside modules/ and includes/ may be in the archive — it lands in
+          # the WHMCS root. (Tree roots are stored as entries themselves, hence `|$`.)
+          if unzip -Z1 "$ASSET" | grep -vE '^(modules|includes)(/|$)' | grep -q .; then
+            echo "::error::$ASSET contains paths outside modules/ and includes/"
+            unzip -Z1 "$ASSET" | grep -vE '^(modules|includes)(/|$)'
             exit 1
           fi
+
+          # The bundled vpnhoodiap must carry ITS OWN pinned version, untouched — its
+          # number is what WHMCS compares against every install (hub, partner,
+          # standalone) to run _upgrade(); restamping it here would desynchronize them.
+          IAP_PIN="$(tr -d ' \t\r\n' < IAP_VERSION)"
+          unzip -p "$ASSET" modules/addons/vpnhoodiap/vpnhoodiap.php \
+            | grep -q "'version'[[:space:]]*=>[[:space:]]*'$IAP_PIN'" \
+            || { echo "::error::bundled vpnhoodiap is not at the pinned version $IAP_PIN"; exit 1; }
 
           # Both halves must declare the version being tagged: the addon's number is what
           # WHMCS compares to decide whether to run _upgrade(), and the connector's is
@@ -365,9 +394,11 @@ jobs:
           # Deliberately minimal. Install steps live in the README and are not repeated
           # here: two copies drift, and the one on the release page is the one nobody
           # remembers to update. Only what is specific to THIS build goes in.
+          IAP_PIN="$(tr -d ' \t\r\n' < IAP_VERSION)"
           cat > "$NOTES" <<EOF
           **VpnHood! Partner Connector $VERSION** — the WHMCS server module (\`vpnhoodpartner\`)
-          plus its configuration addon (\`vpnhoodpartnerconfig\`).
+          plus its configuration addon (\`vpnhoodpartnerconfig\`), bundling the in-app
+          purchase addon (\`vpnhoodiap\` v$IAP_PIN, inactive until you configure it).
 
           \`\`\`
           sha256  $SHA
