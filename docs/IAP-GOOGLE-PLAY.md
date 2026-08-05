@@ -58,10 +58,23 @@ Renewals, cancellations and refunds arrive through Google Pub/Sub:
 2. On the topic, grant the Google Play publisher identity
    `google-play-developer-notifications@system.gserviceaccount.com` the
    **Pub/Sub Publisher** role.
-3. Create a **push subscription** on the topic:
-   - **Endpoint**: the webhook URL from step 3.
-   - **Enable authentication** (OIDC token) and pick a service account as the
-     push identity. Leave the audience at its default (the endpoint URL).
+3. Create a **subscription** on the topic with these settings:
+
+   | Setting | Value |
+   | --- | --- |
+   | Subscription ID | your choice — e.g. `Portal.Push`, or `Portal.Push.Development` for a test install (bookkeeping only; nothing reads it) |
+   | Delivery type | **Push** |
+   | Endpoint URL | the webhook URL from step 3 |
+   | Enable authentication | **ON** (OIDC token) — the webhook rejects unauthenticated pushes |
+   | Service account | the push identity; can be the same service account from step 1 |
+   | Audience | leave **empty** — it defaults to the endpoint URL, which is what the webhook verifies |
+   | Expiration period | **Never expire** — the 31-day-inactivity default silently *deletes the subscription*, and notifications are lost from then on |
+   | Message retention | default (7 days) — if your WHMCS is down, fixed later, every missed event redelivers itself; late/duplicate deliveries are safe (the addon dedups and re-fetches truth from the store) |
+   | Ack deadline / retry policy | defaults |
+
+   If the console warns that the Pub/Sub service agent needs the *Service
+   Account Token Creator* role to mint tokens for the chosen account, accept
+   the grant — it is Google's own signing plumbing.
 4. Back in the WHMCS **Apps** tab, put that push service account's email into
    **Pub/Sub service account** — the webhook rejects pushes signed by anyone
    else.
