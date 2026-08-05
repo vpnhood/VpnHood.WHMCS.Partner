@@ -49,7 +49,7 @@ The credentials JSON:
 Save the row, then copy the generated **webhook URL** — you need it in the next
 step. It looks like:
 
-```
+```text
 https://your-whmcs.example.com/modules/addons/vpnhoodiap/webhook.php?store=appstore&t=<secret>
 ```
 
@@ -66,7 +66,50 @@ There is nothing else to authenticate: Apple signs every notification, and the
 addon verifies that signature against Apple's own root certificate in addition
 to the secret in the URL.
 
-## 4. Products and catalog mapping
+## 4. Verify that notifications arrive
+
+Prove the delivery chain — Apple → your WHMCS — before any real money is
+involved. There are two ways to trigger one:
+
+- **Request a test notification** through the App Store Server API
+  (`POST /inApps/v1/notifications/test`, using the key from step 1). Apple
+  returns a token you can pass to the matching `GET` endpoint to see the
+  delivery result from Apple's side. If your App Store Connect shows a test
+  button under App Store Server Notifications, it does the same thing.
+- **Make a sandbox purchase** (step 6). It produces a real `SUBSCRIBED`
+  notification and exercises the identical path — for most partners this is the
+  simpler check, and you have to do it anyway.
+
+Either way, open **WHMCS Admin → Addons → VpnHood! IAP → Events**. Within a few
+seconds a new row must appear:
+
+| Store | Type | Status | Error | Received |
+| --- | --- | --- | --- | --- |
+| `appstore` | `test` (or `purchased`) | `processed` | *(empty)* | just now |
+
+That row is the proof: the notification reached your server, its Apple
+signature verified against Apple's root certificate, and it was recorded and
+acknowledged. A redelivery of the same notification is recognised as a
+duplicate and answered without a second row.
+
+### If no row appears
+
+The **Log** tab shows how far the request got. Find the most recent `webhook`
+entry:
+
+| What the Log tab shows | What it means | Fix |
+| --- | --- | --- |
+| No `webhook` entry at all | Nothing reached your WHMCS | The notification URL in App Store Connect is wrong or set on the wrong version/environment — it must be **Version 2**, and set for **both** Production and Sandbox |
+| `webhook` with status **404** | The `store=` part of the URL is wrong | Re-copy the whole webhook URL from the Apps tab |
+| `webhook` with status **401** | The secret `t=` token matches no app row | Re-copy the URL; it changes if the app row was deleted and re-added |
+| `webhook` with status **401** and a signature error | The signed payload failed verification | Confirm the URL is registered against the same app whose bundle id is in the Apps tab |
+
+If instead an Events row appears with status **`failed`** and an error message,
+delivery and signature checks passed and the payload was rejected later — the
+error text says why, most often a bundle id that is not registered in the Apps
+tab.
+
+## 5. Products and catalog mapping
 
 1. In **App Store Connect → your app → Subscriptions**, create your
    auto-renewable subscriptions and note each **Product ID**.
@@ -78,7 +121,7 @@ to the secret in the URL.
 Only mapped products are ever provisioned. A purchase of an unmapped product is
 recorded, refused cleanly, and flagged to you — never guessed at.
 
-## 5. Test before going live
+## 6. Test before going live
 
 Create a **sandbox tester** (App Store Connect → Users and Access → Sandbox)
 and buy a subscription in your TestFlight/development build while signed in as

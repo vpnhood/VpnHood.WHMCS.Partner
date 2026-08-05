@@ -46,7 +46,7 @@ In **Addons → VpnHood! IAP → Apps**, add an app:
 Save the row, then copy the generated **webhook URL** — you need it in the next
 step. It looks like:
 
-```
+```text
 https://your-whmcs.example.com/modules/addons/vpnhoodiap/webhook.php?store=googleplay&t=<secret>
 ```
 
@@ -85,12 +85,56 @@ Renewals, cancellations and refunds arrive through Google Pub/Sub:
 ## 5. Play Console: point RTDN at the topic
 
 In **Play Console → Monetize → Monetization setup**, set the topic name
-(`projects/<project>/topics/<name>`) and click **Send test notification**.
+(`projects/<project>/topics/<name>`).
 
-Success looks like: the request returns 200 and a row appears in the addon's
-**Events** tab. If it doesn't, see Troubleshooting below.
+**Notification content**: choose the option that includes *all one-time
+products* (the widest one). Every notification type is handled, and voided
+purchases in particular are what revoke a refunded customer's service — leaving
+them out means refunds go unnoticed until the next daily reconciliation.
 
-## 6. Products and catalog mapping
+## 6. Send a test notification — and verify it arrived
+
+This is the check that proves the whole delivery chain — Play → topic →
+subscription → your WHMCS — before any real money is involved. Do it now, and
+again any time you change the topic, the endpoint or the credentials.
+
+On the same **Monetization setup** page, click **Send test notification**. Play
+reports whether it could publish the message.
+
+Then open **WHMCS Admin → Addons → VpnHood! IAP → Events**. Within a few
+seconds a new row must appear:
+
+| Store | Type | Status | Error | Received |
+| --- | --- | --- | --- | --- |
+| `googleplay` | `test` | `processed` | *(empty)* | just now |
+
+That row is the proof. It means the push reached your server, passed **both**
+authentication layers (the secret URL token and Google's signed OIDC token),
+was parsed, recorded and acknowledged with HTTP 200.
+
+Press the button again and you get a **second** row with a new message id —
+that is correct. If Google *redelivers the same message* (it sometimes does),
+it is recognised as a duplicate and answered 200 without a second row.
+
+### If no row appears
+
+The **Log** tab tells you how far the request got. Find the most recent
+`webhook` entry and match its status:
+
+| What the Log tab shows | What it means | Fix |
+| --- | --- | --- |
+| No `webhook` entry at all | Nothing reached your WHMCS | The subscription is on a different topic than the one in Monetization setup, or its endpoint URL is wrong. Check the subscription's delivery metrics in Cloud Console — errors there mean it is trying and failing; zero attempts mean no message was ever published to that topic. |
+| `webhook` with status **404** | The `store=` part of the URL is wrong | Re-copy the whole webhook URL from the Apps tab |
+| `webhook` with status **401** | The secret `t=` token does not match any app row | Re-copy the URL; it changes if the app row was deleted and re-added |
+| `webhook` with status **401** right after enabling push | The push carried no OIDC token | **Enable authentication** on the subscription |
+| `webhook` with status **401** although authentication is on | The signed identity is not the one the app expects, or the audience does not match | The subscription's service account must equal the **Pub/Sub service account** on the Apps tab, and the endpoint URL must be exactly the one the audience is derived from |
+
+If instead an Events row appears with status **`failed`** and an error message,
+delivery and authentication are fine — the payload was rejected later, and the
+error text says why. The most common cause is the notification being for a
+package name that is not registered in the Apps tab.
+
+## 7. Products and catalog mapping
 
 1. In **Play Console → Monetize → Subscriptions**, create your subscriptions
    with base plans (and offers, if you use them).
@@ -102,7 +146,7 @@ recorded, refused cleanly, and flagged to you — never guessed at. Because
 unacknowledged purchases are auto-refunded by Google after a few days, a
 mapping mistake costs the customer nothing.
 
-## 7. Test before going live
+## 8. Test before going live
 
 Add your Google account as a **license tester** (Play Console → Settings →
 License testing) and buy a subscription from the internal-testing build of your

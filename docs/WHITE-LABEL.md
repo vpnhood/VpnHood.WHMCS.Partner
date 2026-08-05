@@ -7,7 +7,7 @@ listings — with VpnHood invisible behind them, running the infrastructure.
 White-labeling has three layers. Each one builds on the previous, and you can
 stop at any of them:
 
-```
+```text
 Layer 1  Your web store        your WHMCS + this connector      sell keys under your brand
 Layer 2  Your branded apps     your builds of the open-source   your name, icon and package
                                VpnHood client                   on the stores
@@ -54,7 +54,7 @@ right app template and the branding surface for your case.
 you configure it). With Layers 1–2 in place, it turns purchases made *inside*
 your branded apps into normal orders in your WHMCS:
 
-```
+```text
 customer buys in your app ─▶ Google/Apple pays YOU (you are the merchant)
         app sends proof    ─▶ vpnhoodiap on your WHMCS verifies it with the store,
                               creates the client + order + paid invoice,
