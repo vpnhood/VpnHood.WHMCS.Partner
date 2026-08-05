@@ -70,7 +70,10 @@ Renewals, cancellations and refunds arrive through Google Pub/Sub:
    | Audience | leave **empty** — it defaults to the endpoint URL, which is what the webhook verifies |
    | Expiration period | **Never expire** — the 31-day-inactivity default silently *deletes the subscription*, and notifications are lost from then on |
    | Message retention | default (7 days) — if your WHMCS is down, fixed later, every missed event redelivers itself; late/duplicate deliveries are safe (the addon dedups and re-fetches truth from the store) |
-   | Ack deadline / retry policy | defaults |
+   | Acknowledgement deadline | **60 seconds** — the webhook processes synchronously before answering, and a renewal does real work (store API + invoicing); the 10 s default risks spurious redeliveries |
+   | Retry policy | **Exponential backoff**, min 10 s / max 600 s — an unacked message means the site is down; retrying immediately just hammers it |
+   | Payload unwrapping | **OFF** (default) — the webhook reads the standard Pub/Sub envelope, including `messageId` for dedup; unwrapping breaks both |
+   | Message ordering | off (default) — the addon skips events staler than the purchase's current state, so ordering is handled without it |
 
    If the console warns that the Pub/Sub service agent needs the *Service
    Account Token Creator* role to mint tokens for the chosen account, accept
