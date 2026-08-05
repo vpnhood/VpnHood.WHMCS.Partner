@@ -18,6 +18,9 @@ Your customer ─▶ Your WHMCS (this module) ─▶ VpnHood! Partner Hub
 You never run any VPN infrastructure and never handle VpnHood's payment — you simply
 keep your prepaid credit topped up with VpnHood.
 
+Want to go further than reselling — your own branded apps and in-app purchases on
+Google Play and the App Store? See the **[White-Label Guide](docs/WHITE-LABEL.md)**.
+
 ## What you need from VpnHood
 
 VpnHood will give you:
