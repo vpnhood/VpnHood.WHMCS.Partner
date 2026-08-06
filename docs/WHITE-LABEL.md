@@ -88,6 +88,8 @@ proves it end-to-end:
 
 - **[Google Play setup](IAP-GOOGLE-PLAY.md)**
 - **[Apple App Store setup](IAP-APPLE-APP-STORE.md)**
+- **[How money appears in your WHMCS](IAP-MONEY.md)** — invoice semantics,
+  reports, refunds, and what to tell your accountant. Read before the first sale.
 
 In outline, both follow the same shape:
 
