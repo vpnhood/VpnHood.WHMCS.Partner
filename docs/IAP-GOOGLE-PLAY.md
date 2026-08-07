@@ -178,7 +178,7 @@ its expiry. That exercises the whole lifecycle.
   URL matches the Apps tab exactly (the audience is pinned to it), OIDC
   authentication is enabled, and the push service-account email matches the
   **Pub/Sub service account** field.
-- **`purchase.verify` fails with a store error** — the service account lacks
+- **A purchase fails with a store error** — the service account lacks
   Play Console permissions (step 2) or the Android Publisher API isn't enabled
   (step 1).
 - **Purchase parks as unmapped** — the `(product id, base plan id)` pair isn't
