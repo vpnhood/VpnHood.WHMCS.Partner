@@ -164,7 +164,7 @@ exercises the whole lifecycle.
 
 - **Notifications don't arrive** — confirm the V2 URL (not V1) is set for both
   Production and Sandbox and matches the Apps tab URL exactly.
-- **`purchase.verify` fails with a store error** — the credentials JSON is
+- **A purchase fails with a store error** — the credentials JSON is
   malformed (all three fields required, `privateKey` with `\n` line breaks) or
   the API key was revoked in App Store Connect.
 - **Sign-in rejected with an audience error** — the token's audience isn't in
