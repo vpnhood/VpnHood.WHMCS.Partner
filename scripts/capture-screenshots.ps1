@@ -19,8 +19,8 @@
     WHMCS to capture from. Defaults to the shared dev install.
 
 .PARAMETER CredentialsPath
-    File holding the admin credentials, in the format written by the VpnHood dev setup:
-    a line "username:", the username, a blank line, "password:", then the password.
+    JSON file holding the admin credentials, in the format written by the VpnHood dev
+    setup: { "adminUser": "...", "adminPassword": "..." }.
 
 .PARAMETER ProductId
     Product to use for the Module Settings shot. Defaults to whichever product the
@@ -55,8 +55,8 @@ Set-StrictMode -Version Latest
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 if (-not $OutDir) { $OutDir = Join-Path $RepoRoot 'docs\images' }
 if (-not $CredentialsPath) {
-    # <Vh root>\.user\whmcs\ — outside the repo, never committed. See CLAUDE.md.
-    $CredentialsPath = Join-Path (Split-Path -Parent $RepoRoot) '.user\whmcs\admin_password_dev.txt'
+    # <Vh root>\.user\account-dev.vpnhood.com\ — outside the repo, never committed. See CLAUDE.md.
+    $CredentialsPath = Join-Path (Split-Path -Parent $RepoRoot) '.user\account-dev.vpnhood.com\secrets.json'
 }
 
 function Fail([string] $Message) { Write-Host "ERROR: $Message" -ForegroundColor Red; exit 1 }
@@ -81,10 +81,10 @@ if (-not (Test-Path (Join-Path $toolDir 'node_modules\playwright'))) {
     } finally { Pop-Location }
 }
 
-$lines = Get-Content $CredentialsPath
-$user = ($lines | Select-Object -Skip 1 -First 1).Trim()
-$pass = ($lines | Select-Object -Skip 4 -First 1)
-if (-not $user -or -not $pass) { Fail "Could not parse a username and password out of $CredentialsPath." }
+$secrets = Get-Content $CredentialsPath -Raw | ConvertFrom-Json
+$user = $secrets.adminUser
+$pass = $secrets.adminPassword
+if (-not $user -or -not $pass) { Fail "Could not read adminUser and adminPassword out of $CredentialsPath." }
 
 Write-Host "==> Capturing from $Url into $OutDir" -ForegroundColor Cyan
 
