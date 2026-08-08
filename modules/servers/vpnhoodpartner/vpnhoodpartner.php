@@ -425,6 +425,63 @@ function vpnhoodpartner_ClientArea(array $params): array
         'templatefile'      => 'clientarea',
         'templateVariables' => [
             'accessCode' => (string) $params['model']->serviceProperties->get('accessCode'),
-        ],
+        ] + vpnhoodpartner_storeBadgeVars($params),
+    ];
+}
+
+/**
+ * Store-purchase badge for the client area.
+ *
+ * A service sold through an app store carries a 'purchasedVia' service property,
+ * written by the vpnhoodiap addon at provisioning time (the property NAME is the
+ * whole contract between the two — this module never calls into that addon, and
+ * works unchanged on partner installs that do not run it). Services sold the
+ * ordinary way have no such property, get an empty label, and render no badge.
+ *
+ * It matters because the money never moved here: the customer paid Google/Apple/
+ * Microsoft, renewals are charged there, and cancellation or refund can only be
+ * done there. Saying so on the page is what prevents a ticket asking the partner
+ * to refund a charge they never took.
+ */
+function vpnhoodpartner_storeBadgeVars(array $params): array
+{
+    try {
+        $store = (string) $params['model']->serviceProperties->get('purchasedVia');
+    } catch (Throwable $e) {
+        $store = '';
+    }
+
+    return [
+        'purchasedVia'      => $store,
+        'purchasedViaLabel' => vpnhoodpartner_storeLabel($store),
+    ];
+}
+
+/** Store id → the name a customer knows it by. '' when this was not a store purchase. */
+function vpnhoodpartner_storeLabel(string $store): string
+{
+    return match ($store) {
+        'googleplay' => 'Google Play',
+        'appstore'   => 'the Apple App Store',
+        'microsoft'  => 'the Microsoft Store',
+        default      => '',
+    };
+}
+
+/**
+ * Admin service page: show which store sold this service, so an admin reading the
+ * order sees what the customer sees without opening the IAP addon. Read-only — the
+ * purchase record owns this value, it is not editable here.
+ */
+function vpnhoodpartner_AdminServicesTabFields(array $params): array
+{
+    $label = vpnhoodpartner_storeBadgeVars($params)['purchasedViaLabel'];
+    if ($label === '') {
+        return [];
+    }
+
+    return [
+        'Purchased via' => htmlspecialchars($label, ENT_QUOTES, 'UTF-8')
+            . ' <em>(billed by the store — cancellations and refunds happen there)</em>',
     ];
 }
