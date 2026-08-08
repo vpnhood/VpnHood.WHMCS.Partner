@@ -32,6 +32,9 @@ service properties, and — most importantly — the **upstream Hub API contract
 - **Errors:** `logModuleCall('vpnhoodpartner', ...)` and return a `VpnHood Partner Error: ...`
   string from lifecycle hooks.
 - **Folder naming:** lowercase letters/numbers only (no underscores/spaces).
+- **Bump the version for ANY change to a module's files** — templates, hooks, a comment —
+  not only schema or DB changes. WHMCS decides what to reinstall by comparing the stamped
+  version, so an edit shipped under an unchanged number silently never reaches the install.
 - **Never hand-edit a module's version.** The root `VERSION` file is the single source of
   truth; `scripts/set-version.sh` stamps it into `vpnhoodpartnerconfig` (`_config()`) and
   `vpnhoodpartner` (`whmcs.json`). `.github/workflows/release.yml` bumps the patch number,
