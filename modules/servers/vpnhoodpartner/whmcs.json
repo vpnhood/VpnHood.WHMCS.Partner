@@ -2,7 +2,7 @@
   "schema": "1.0",
   "type": "whmcs-servers",
   "name": "vpnhoodpartner",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "license": "free",
   "category": "digitalservices",
   "description": {
