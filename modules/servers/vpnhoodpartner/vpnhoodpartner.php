@@ -339,11 +339,27 @@ function vpnhoodpartner_CreateAccount(array $params): string
         $key = $data['keys'][0];
 
         // Persist only what later steps need: the upstream ORDER id (required by every
-        // lifecycle relay) and the delivered access code (client-area display).
+        // lifecycle relay) and the delivered access code (client-area display, and the
+        // exact-match side of claim-by-code — the IAP module searches this property).
         $params['model']->serviceProperties->save([
             'upstreamOrderId' => $key['upstreamOrderId'] ?? '',
             'accessCode'      => $key['accessCode'] ?? '',
         ]);
+
+        // The FIRST key a client buys becomes their default at purchase time
+        // (lifecycle §8) — parity with the hub's vpnhoodstore behaviour.
+        $clientHasDefault = Capsule::table('tblhosting as h')
+            ->join('tblcustomfieldsvalues as v', 'v.relid', '=', 'h.id')
+            ->join('tblcustomfields as f', 'f.id', '=', 'v.fieldid')
+            ->where('h.userid', (int) $params['userid'])
+            ->whereIn('h.domainstatus', ['Pending', 'Active', 'Suspended'])
+            ->where('f.type', 'product')
+            ->whereRaw("LOWER(SUBSTRING_INDEX(f.fieldname, '|', 1)) = 'isdefaultkey'")
+            ->where('v.value', 'yes')
+            ->exists();
+        if (!$clientHasDefault) {
+            $params['model']->serviceProperties->save(['isDefaultKey' => 'yes']);
+        }
 
         return 'success';
     } catch (Exception $e) {
