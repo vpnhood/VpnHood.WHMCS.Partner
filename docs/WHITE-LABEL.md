@@ -86,15 +86,17 @@ Each store has its own step-by-step guide covering the whole path — store
 account, API credentials, webhook, catalog mapping, and the test purchase that
 proves it end-to-end:
 
-- **[Google Play setup](IAP-GOOGLE-PLAY.md)**
-- **[Apple App Store setup](IAP-APPLE-APP-STORE.md)**
-- **[How money appears in your WHMCS](IAP-MONEY.md)** — invoice semantics,
+- **[Google Play setup](https://github.com/vpnhood/VpnHood.WHMCS.Iap/blob/main/docs/IAP-GOOGLE-PLAY.md)**
+- **[Apple App Store setup](https://github.com/vpnhood/VpnHood.WHMCS.Iap/blob/main/docs/IAP-APPLE-APP-STORE.md)**
+- **[How money appears in your WHMCS](https://github.com/vpnhood/VpnHood.WHMCS.Iap/blob/main/docs/IAP-MONEY.md)** — invoice semantics,
   reports, refunds, and what to tell your accountant. Read before the first sale.
 
 In outline, both follow the same shape:
 
-1. In WHMCS admin, activate the **VpnHood! IAP** addon and the **vpnhoodiappay**
-   payment gateway (both ship in the zip).
+1. Install the **`vpnhoodiap`** package (its own release —
+   [VpnHood.WHMCS.Iap](https://github.com/vpnhood/VpnHood.WHMCS.Iap/releases/latest),
+   extracted at your WHMCS root), then activate the **VpnHood! IAP** addon and the
+   **vpnhoodiappay** payment gateway in WHMCS admin.
 2. **Apps tab**: register each of your store apps — package/bundle id, the OAuth
    client ids your app's sign-in uses, and the store credentials (stored
    encrypted, write-only). Saving generates the app's unique webhook URL; give
@@ -106,12 +108,14 @@ In outline, both follow the same shape:
    under **Events**.
 
 Customer-facing invoice emails for app-store sales are suppressed automatically
-(the store already receipts the customer); the bundled cron keeps entitlements
+(the store already receipts the customer); the addon's own cron keeps entitlements
 reconciled against the stores daily.
 
 ### Availability
 
-The WHMCS side ships in every `vpnhoodpartner.zip` today. On the app side, the
+The WHMCS side is a package of its own — `vpnhoodiap` is released separately from
+the connector and installed alongside it, so you take it only if you sell in-app
+purchases, and it updates on its own schedule. On the app side, the
 store-billing integration (Google sign-in/billing, Apple sign-in/StoreKit) is
 part of the current VpnHood client rollout — coordinate with VpnHood before
 wiring your branded app for in-app purchases so your build picks up the
@@ -132,8 +136,8 @@ obligation to VpnHood is keeping the prepaid credit topped up.
 
 - [ ] Layer 1: WHMCS + connector installed, products synced, prices set
 - [ ] Layer 2: branded app builds published from your own developer accounts
-- [ ] Layer 3: [Google Play setup](IAP-GOOGLE-PLAY.md) completed for your Android app
-- [ ] Layer 3: [Apple App Store setup](IAP-APPLE-APP-STORE.md) completed for your iOS app
+- [ ] Layer 3: [Google Play setup](https://github.com/vpnhood/VpnHood.WHMCS.Iap/blob/main/docs/IAP-GOOGLE-PLAY.md) completed for your Android app
+- [ ] Layer 3: [Apple App Store setup](https://github.com/vpnhood/VpnHood.WHMCS.Iap/blob/main/docs/IAP-APPLE-APP-STORE.md) completed for your iOS app
 - [ ] Sandbox/internal-testing purchase verified end-to-end before going live
 
 Questions about any layer — or to get started as a white-label partner — contact
