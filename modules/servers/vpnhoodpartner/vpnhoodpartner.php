@@ -338,12 +338,16 @@ function vpnhoodpartner_CreateAccount(array $params): string
         }
         $key = $data['keys'][0];
 
-        // Persist only what later steps need: the upstream ORDER id (required by every
-        // lifecycle relay) and the delivered access code (client-area display, and the
-        // exact-match side of claim-by-code — the IAP module searches this property).
+        // Persist what later steps need: the upstream ORDER id (required by every lifecycle
+        // relay), the delivered access code (client-area display, and the exact-match side of
+        // claim-by-code — the IAP module searches this property), and the upstream token id.
+        // The token id is never sent anywhere; it is kept because it is the one handle that is
+        // unambiguous across both installs, so a support exchange can name a key without
+        // trading id numbers that exist on both sides for different records.
         $params['model']->serviceProperties->save([
             'upstreamOrderId' => $key['upstreamOrderId'] ?? '',
             'accessCode'      => $key['accessCode'] ?? '',
+            'accessTokenId'   => $key['accessTokenId'] ?? '',
         ]);
 
         // The FIRST key a client buys becomes their default at purchase time
@@ -443,4 +447,37 @@ function vpnhoodpartner_ClientArea(array $params): array
             'accessCode' => (string) $params['model']->serviceProperties->get('accessCode'),
         ],
     ];
+}
+
+/**
+ * Admin service page: name the ids VpnHood can act on.
+ *
+ * Every lifecycle call carries `upstreamOrderId` — VpnHood's ORDER id, returned when the
+ * key was provisioned. This WHMCS, like theirs, addresses services by SERVICE id, and the
+ * two are unrelated sequences that both hold the quoted number upstream for different
+ * customers: quoting the wrong one points support at someone else's key (2026-09-01).
+ * So the page shows the order id, and the token id beside it as the handle that cannot
+ * collide. Read-only — the upstream order owns both values.
+ */
+function vpnhoodpartner_AdminServicesTabFields(array $params): array
+{
+    try {
+        $props = $params['model']->serviceProperties;
+        $upstreamOrderId = (string) $props->get('upstreamOrderId');
+        $accessTokenId   = (string) $props->get('accessTokenId');
+    }
+    catch (Throwable $e) {
+        return [];
+    }
+
+    $fields = [];
+    if ($upstreamOrderId !== '') {
+        $fields['VpnHood order id'] = '#' . htmlspecialchars($upstreamOrderId, ENT_QUOTES, 'UTF-8')
+            . ' <em>(quote this to VpnHood — not the service id of this page)</em>';
+    }
+    if ($accessTokenId !== '') {
+        $fields['VpnHood key id'] = htmlspecialchars($accessTokenId, ENT_QUOTES, 'UTF-8');
+    }
+
+    return $fields;
 }
