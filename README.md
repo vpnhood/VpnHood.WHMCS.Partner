@@ -116,7 +116,10 @@ warning when they do not — so you find out here rather than when a customer's 
 | Terminate / Cancel | `terminate` → expires the upstream key |
 
 The delivered access code is shown to your customer in their **client area** for the
-service.
+service. Each key also carries VpnHood's own **order id** (`upstreamOrderId`, the handle
+every lifecycle call sends) and **key id** (`accessTokenId`); both are shown on the
+service's admin page under **Module Settings**. Those are the ids VpnHood recognises —
+your own service and order ids mean nothing to them.
 
 ## Troubleshooting
 
@@ -125,6 +128,11 @@ service.
 - **"Invalid API credentials" / "suspended"** – verify your API Key/Secret and that your
   partner account is active with VpnHood.
 - **"Insufficient credit"** – top up your prepaid balance with VpnHood.
+- **"Order not found for this partner"** – the id sent as `upstreamOrderId` was not VpnHood's
+  order id. Use the **VpnHood order id** shown on the service's admin page: never your own
+  WHMCS service or order id, and never the number in a client-area URL — those are different
+  sequences, and the same number is live upstream for another customer. When in doubt quote
+  the **VpnHood key id** instead; it cannot collide.
 - All errors are recorded under **Utilities → Logs → Module Log** (search `vpnhoodpartner`).
 
 ## License
