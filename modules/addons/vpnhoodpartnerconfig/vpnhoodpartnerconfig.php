@@ -505,50 +505,40 @@ function vpnhoodpartnerconfig_output($vars)
 }
 
 /**
- * Installed versions of both halves of the connector.
+ * What this install runs, what is published, and whether the packages fit.
  *
- * WHMCS shows a version for addon modules on its own (from _config), but has no
- * equivalent display for provisioning modules — so the connector's own version
- * would otherwise appear nowhere in the admin UI. Read it back from its
- * whmcs.json, which scripts/set-version.sh keeps in step with the repo tag.
+ * WHMCS shows a version for addon modules on its own, none at all for provisioning
+ * modules, and it has no update channel for third-party modules whatsoever — so
+ * this table is the only place a partner's admin can see the answer, including
+ * that a newer connector exists at all. It reports; installing stays a deliberate
+ * human act.
+ *
+ * The renderer ships with every VpnHood package at the same path, so this works
+ * whether or not any other VpnHood package is installed here.
  */
 function vpnhoodpartnerconfig_versionLine(): string
 {
-    $config    = vpnhoodpartnerconfig_config();
-    $addon     = (string) ($config['version'] ?? '');
-    $connector = '';
+    $check = ROOTDIR . '/modules/widgets/vpnhoodupdates.php';
+    if (!is_readable($check)) {
+        return '';
+    }
+    require_once $check;
 
-    $manifest = dirname(__DIR__, 2) . '/servers/vpnhoodpartner/whmcs.json';
-    if (is_readable($manifest)) {
-        // These manifests are sometimes written with a UTF-8 BOM.
-        $raw = preg_replace('/^\xEF\xBB\xBF/', '', (string) file_get_contents($manifest));
-        $json = json_decode($raw, true);
-        if (is_array($json) && isset($json['version'])) {
-            $connector = (string) $json['version'];
-        }
+    // "Check now" is a plain link on purpose: it only refetches a public version
+    // number and rewrites a cache row, so the worst a forged click can achieve is
+    // an early refresh. Anything that WROTE to the install would need a token.
+    $out = '';
+    if (isset($_GET['vhcheck'])) {
+        VpnHoodUpdateCheck::refresh(true);
+        $out .= '<div class="alert alert-info">Checked just now.</div>';
     }
 
-    $parts = [];
-    if ($connector !== '') {
-        $parts[] = 'connector module <code>' . htmlspecialchars($connector, ENT_QUOTES) . '</code>';
-    }
-    $parts[] = 'this addon <code>'
-        . htmlspecialchars($addon !== '' ? $addon : 'unversioned', ENT_QUOTES) . '</code>';
-
-    $line = '<p class="text-muted">Installed versions: ' . implode(' &middot; ', $parts) . '</p>';
-
-    // Both halves ship in one zip carrying one version, and are only ever tested
-    // together. Different numbers mean the last release was extracted over only part
-    // of the install — worth saying out loud, since nothing else would report it.
-    if ($connector !== '' && $addon !== '' && $connector !== $addon) {
-        $line .= '<div class="alert alert-warning">The connector module (<code>'
-            . htmlspecialchars($connector, ENT_QUOTES) . '</code>) and this addon (<code>'
-            . htmlspecialchars($addon, ENT_QUOTES) . '</code>) are at different versions. '
-            . 'They ship together in a single zip — re-extract the latest release at the root '
-            . 'of your WHMCS installation so both halves are updated.</div>';
-    }
-
-    return $line;
+    $status = VpnHoodUpdateCheck::status();
+    return $out
+         . '<h3>Installed VpnHood packages</h3>'
+         . VpnHoodUpdateCheck::renderTable($status)
+         . '<p class="text-muted">' . VpnHoodUpdateCheck::lastCheckedText($status)
+         . ' &nbsp; <a href="addonmodules.php?module=vpnhoodpartnerconfig&vhcheck=1" class="btn btn-default btn-xs">Check now</a></p>';
 }
 
 /**
