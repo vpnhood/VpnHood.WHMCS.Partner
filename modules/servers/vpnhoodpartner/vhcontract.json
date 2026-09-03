@@ -1,0 +1,8 @@
+{
+    "module": "vpnhoodpartner",
+    "kind": "server",
+    "label": "VpnHood! Partner Connector (provisioning)",
+    "repo": "vpnhood/VpnHood.WHMCS.Partner",
+    "package": "vpnhoodpartner.zip",
+    "packageLabel": "VpnHood! Partner Connector"
+}

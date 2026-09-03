@@ -61,8 +61,15 @@ Download the new zip and repeat steps 1–3. Extracting over the top replaces th
 leaves your settings, products and services untouched.
 
 Then open **Addons → VpnHood Partner Connector Configuration** once. WHMCS applies any upgrade
-the release needs on that page load, and the page reports the installed version of both halves —
-if they disagree, the zip was only partly extracted and you should extract it again.
+the release needs on that page load.
+
+**You will be told when an update exists.** The connector checks GitHub once a day and shows
+the result in a **VpnHood! Modules** panel on your WHMCS admin home page and on the connector's
+configuration page: the installed version of every VpnHood package, whether a newer release is
+available (with a link to it), and a warning if a package was only partly extracted or if two
+VpnHood packages on the install do not fit each other. It never installs anything by itself —
+updating is always the steps above. The check needs outbound HTTPS to `api.github.com`; where
+that is blocked the panel simply says the check failed.
 
 ## Product setup
 
