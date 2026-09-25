@@ -28,7 +28,10 @@ modules/
                                + the addon page: upstream product sync
   servers/vpnhoodpartner/
     vpnhoodpartner.php         WHMCS lifecycle hooks + _ConfigOptions + _ClientArea
-    lib/HubClient.php          cURL client for the Hub API (key/secret over HTTPS)
+                               + the Module tab (order ids, reconcile)
+    lib/HubClient.php          cURL client for the Hub API (key/secret over HTTPS); records
+                               what the Hub supports (X-Vpnhood-Hub-Features)
+    lib/HubApiException.php    a failed call: Hub rejection (code, details) vs unknown outcome
     templates/
       clientarea.tpl           shows the delivered access code
       error.tpl
@@ -122,12 +125,13 @@ Covered by `tests/integration/sync-products.test.sh` in the **VpnHood.WHMCS** re
 
 | WHMCS hook | Hub action | Notes |
 |------------|-----------|-------|
-| `_CreateAccount` | `order` | sends the service's `billingCycle`; stores `upstreamOrderId` + `accessCode` |
+| `_CreateAccount` | `order` (or `linkOrder`) | sends the service's `billingCycle`, its id as `customerReference` and its `idempotencyKey`; stores `upstreamOrderId` + `accessCode` + `accessTokenId` |
 | `_Renew` | `renew` | settles the outstanding upstream renewal invoice from partner credit |
 | `_SuspendAccount` | `suspend` | forwards WHMCS's `suspendreason` upstream as `suspendReason` |
 | `_UnsuspendAccount` | `unsuspend` | |
-| `_TerminateAccount` | `terminate` | |
+| `_TerminateAccount` | `terminate` | then clears the service's key: the next Create is a new purchase |
 | `_ClientArea` | — | renders the stored `accessCode` directly; no Hub call on page view |
+| `_AdminServicesTabFields` / `…Save` | — | the Module tab: order and key ids; the reconcile panel (below) |
 
 The client area shows the access code delivered at provisioning time — no button, no AJAX,
 no re-fetch through the Hub. If the upstream code is ever rotated, the stored value goes
@@ -140,24 +144,79 @@ credit. `renew` therefore no longer takes `nextDueDate` — the upstream derives
 when the invoice is paid. If the upstream has not generated that invoice yet, `renew` returns
 **409** and `_Renew` fails loudly rather than reporting a renewal that did not happen.
 
+## Create is safe to repeat (against a Hub with `idempotency-v1`)
+
+A Create whose response is lost — a timeout, a gateway `504` while the Hub still finished —
+leaves the service Pending with no order id, although the partner was charged. Pressing
+Create again must return that order, not buy a second one; so must two Creates of one service
+running at once (both happened in production). Hence:
+
+1. **One key per service, saved before anything is ordered.** `vpnhoodpartner_idempotencyKey()`
+   takes a named lock on the service in this WHMCS's database, reads the `idempotencyKey`
+   property, creates and saves one only if absent, and reads it back. If it cannot be saved,
+   nothing is ordered. Every Create of the service sends that key, so the Hub buys once and
+   answers every repeat with the same order (`replayed: true`).
+2. **Terminate clears the key**, so a Create after Terminate is an intentional new purchase.
+   A Create under a key whose order is already terminated upstream gets `409 key_spent`.
+3. **What the Hub supports** comes from its `X-Vpnhood-Hub-Features` header, recorded by
+   `HubClient` from every answer that is the Hub's own JSON envelope — errors included, so the
+   first answer after an upgrade may teach it. An answer without the header clears it (a Hub
+   rolled back, or another Hub at the same address); a timeout or a proxy's error page
+   changes nothing. The record (`tblconfiguration.VpnHoodPartnerHubFeatures`) is keyed on the
+   endpoint and API key, so changing either forgets it. An older Hub ignores the key and buys
+   on every Create — so everything below depends on `idempotency-v1`.
+4. **The error message says whether Create again is safe.** After a timeout, a 5xx, a proxy
+   page, `in_progress` or `not_delivered`: with `idempotency-v1`, "pressing Create again
+   returns it without charging twice"; without it, "do not press Create again — check your
+   VpnHood account first". `not_provisioned` / `needs_reconciliation`: VpnHood support is
+   finishing the order, a repeat is refused until then.
+5. **Reconcile** (Module tab, `vpnhoodpartner_reconcileField`). A keyed Create whose
+   `customerReference` already has live orders placed **without** a key — by an older
+   connector, whose response may have been lost — is refused with `409 reconcile` listing them.
+   The Module tab then lists the candidates with **Link to VpnHood order #** and **Order a new
+   key**; the admin picks one, clicks **Save Changes** (`_AdminServicesTabFieldsSave` stores
+   `hubLinkOrderId`, or rotates the key and stores `hubConfirmNewPurchase`), then presses
+   **Create**, which sends `linkOrder` or `order` with `confirmNewPurchase: true`. Through the
+   standard Create, WHMCS activates the service itself. The panel is shown only while the Hub
+   advertises `idempotency-v1`: an older Hub has no `linkOrder`, and answers it with `404`
+   rather than buying.
+
 ## Upstream Hub API contract (must match VpnHood.WHMCS)
 
 `POST <hub>/modules/addons/vpnhoodpartnerhub/api.php`, JSON body `{ "action", ... }`,
 headers `X-Vpnhood-Key`, `X-Vpnhood-Secret`. Response envelope:
-`{ "success": true, "data": {...} }` or `{ "success": false, "error": "..." }`.
-`HubClient::call` unwraps `data` and throws on `success=false`.
+`{ "success": true, "data": {...} }` or `{ "success": false, "error": "...", "code"?: "...", "details"?: {...} }`,
+and the header `X-Vpnhood-Hub-Features` (comma-separated; `idempotency-v1`) on every response
+of a Hub that has them. `HubClient::call` unwraps `data` and throws `HubApiException` on
+`success=false` (with `code`, `details`, the HTTP status, and whether the Hub itself answered).
 
 | Action | Request params | `data` returned |
 |--------|----------------|-----------------|
 | `getBalance` | — | `clientId, balance, currency` |
 | `getProducts` | — | `products[] { downstreamRef, name, paymentType, allowMultipleQuantities, billingCycleMonths, availableCycles }` |
-| `order` | `downstreamRef`, `billingCycle?`, `quantity?`, `customerReference?` | `keys[] { upstreamOrderId, customerReference, deliveryType, accessTokenId + accessCode \| csv }` |
+| `order` | `downstreamRef`, `billingCycle?`, `quantity?`, `customerReference?`, `idempotencyKey?`, `confirmNewPurchase?` | `replayed`, `keys[] { upstreamOrderId, customerReference, deliveryType, accessTokenId + accessCode \| csv }` |
+| `linkOrder` | `idempotencyKey`, `upstreamOrderId`, `downstreamRef`, `billingCycle?`, `customerReference?` | as `order`, plus `linked: true` |
 | `renew` | `upstreamOrderId` | `status, nextDueDate` (**409** when no renewal invoice is outstanding yet) |
 | `suspend` | `upstreamOrderId`, `suspendReason?` | `status` |
 | `unsuspend` / `terminate` / `cancel` | `upstreamOrderId` | `status` |
 | `getOrder` | `upstreamOrderId` | `status, nextDueDate` |
-| `getAccessCode` | `upstreamOrderId` | `accessTokenId, accessCode` |
+| `getAccessCode` | `upstreamOrderId` | `deliveryType`, `accessTokenId + accessCode` or `csv` |
 | `getTransactions` | — | `transactions[]` |
+
+`idempotencyKey` (1-64 characters: letters, digits, `.`, `-`, `_`; case-sensitive) buys exactly
+one unit, once: `quantity` must be 1, and a repeat with a different product, cycle or
+`customerReference` is refused. The error `code`s the connector acts on:
+
+| `code` | HTTP | Meaning |
+|--------|------|---------|
+| `in_progress` / `initializing` | 409 | a request with this key (or the Hub's first-use setup) is still running — retry |
+| `reconcile` | 409 | keyless live orders exist under this `customerReference`; `details.candidates[]` = `{ upstreamOrderId, product, billingCycle, status, placedAt }` |
+| `key_mismatch` | 409 | the key belongs to a different request (or `linkOrder`: to a different order) |
+| `key_spent` | 409 | the key's order is terminated or cancelled; a replacement needs a new key |
+| `not_provisioned` / `needs_reconciliation` | 409 | paid, but VpnHood support must finish it; `details.upstreamOrderId`; do not order again |
+| `not_delivered` | 409 | provisioned, the key could not be read; repeat the request, or `getAccessCode` |
+| `insufficient_credit` | 402 | nothing was charged; top up and repeat (the key is free again) |
+| `already_claimed` / `link_rejected` | 409 / 404 | `linkOrder` only: another key has that order, or it is not this purchase |
 
 > `upstreamOrderId` is the upstream WHMCS **order id** and is the handle for every action.
 > The Hub resolves it to the underlying service itself, scoped to the calling partner, so an
@@ -182,10 +241,16 @@ unsupported billing cycle.
 
 ## Stored service properties
 
-`_CreateAccount` persists exactly two properties on the WHMCS service:
+WHMCS keeps them as admin-only product custom fields, created on first save:
 - `upstreamOrderId` — required by every lifecycle relay.
 - `accessCode` — the code delivered at provisioning time, rendered directly in the client
   area. It is **not** re-fetched from the Hub afterward.
+- `accessTokenId` — the upstream token id: the handle that is unambiguous across both
+  installs when support has to name a key.
+- `isDefaultKey` — `yes` on the client's first key (parity with the Hub's store module).
+- `idempotencyKey` — sent with every Create of the service; cleared by Terminate.
+- `hubReconcile`, `hubLinkOrderId`, `hubConfirmNewPurchase` — the reconcile panel's state and
+  the admin's choice; cleared by the Create that acts on them.
 
 (CSV/bulk delivery is not stored by the connector; it delivers a single access code.)
 
@@ -362,3 +427,6 @@ value their install does not have.
   mapped to an allowed `downstreamRef`, place a test order as an end customer, confirm the
   key is delivered in the client area, then trigger renew/suspend/terminate and confirm they
   propagate upstream (check the Hub's `mod_vpnhood_partner_log`).
+- Idempotent Create, reconcile and both directions of compatibility (this connector against
+  the previous Hub release, the previous connector release against this Hub) are covered by
+  `tests/integration/connector-idempotency.test.sh` in the **VpnHood.WHMCS** repo.

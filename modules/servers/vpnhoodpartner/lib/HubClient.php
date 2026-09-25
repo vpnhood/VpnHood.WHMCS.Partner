@@ -2,7 +2,10 @@
 
 namespace WHMCS\Module\Server\VpnHoodPartner;
 
+require_once __DIR__ . '/HubApiException.php';
+
 use Exception;
+use WHMCS\Database\Capsule;
 
 /**
  * HTTP client for the upstream VpnHood Partner Hub API.
@@ -20,6 +23,12 @@ class HubClient
     private bool $insecure;
 
     private const API_PATH = '/modules/addons/vpnhoodpartnerhub/api.php';
+
+    /** tblconfiguration row: what the configured Hub last said it supports (X-Vpnhood-Hub-Features). */
+    private const FEATURES_SETTING = 'VpnHoodPartnerHubFeatures';
+
+    /** The Hub makes a repeated keyed order return the first one instead of charging again. */
+    public const FEATURE_IDEMPOTENCY = 'idempotency-v1';
 
     /**
      * @param bool $secure   When the base URL has no scheme, choose https (true) or http (false).
@@ -107,7 +116,7 @@ class HubClient
     /**
      * Call an API action and return the decoded "data" payload.
      *
-     * @throws Exception on transport or API error.
+     * @throws HubApiException on transport or API error (credentials: Exception).
      */
     public function call(string $action, array $params = []): array
     {
@@ -147,13 +156,22 @@ class HubClient
             curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 0);
         }
 
+        $headers = [];
+        curl_setopt($ch, CURLOPT_HEADERFUNCTION, function ($ch, string $line) use (&$headers): int {
+            $parts = explode(':', $line, 2);
+            if (count($parts) === 2) {
+                $headers[strtolower(trim($parts[0]))] = trim($parts[1]);
+            }
+            return strlen($line);
+        });
+
         $response = curl_exec($ch);
-        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
 
         if ($response === false) {
             $err = curl_error($ch);
             curl_close($ch);
-            throw new Exception('Connection to VpnHood Partner Hub failed: ' . $err);
+            throw new HubApiException('Connection to VpnHood Partner Hub failed: ' . $err, $httpCode, false);
         }
         curl_close($ch);
 
@@ -162,17 +180,81 @@ class HubClient
             // Not the JSON envelope we expect — surface a snippet of the actual body so the
             // cause is visible (an HTML error page, a WAF/proxy block, a PHP error, or empty
             // body all otherwise look identical from a bare status code).
-            throw new Exception(
-                'Invalid response from Hub (HTTP ' . $httpCode . '): ' . self::responseSnippet($response)
+            throw new HubApiException(
+                'Invalid response from Hub (HTTP ' . $httpCode . '): ' . self::responseSnippet($response),
+                $httpCode,
+                false
             );
+        }
+
+        // The Hub itself answered, success or error, so its answer says what it supports — and a
+        // Hub that no longer sends the header (rolled back, or another Hub at the same address)
+        // loses what an earlier one advertised. A proxy page or a timeout never gets here.
+        $answered = array_key_exists('success', $decoded);
+        if ($answered) {
+            $this->recordFeatures($headers['x-vpnhood-hub-features'] ?? '');
         }
 
         if (empty($decoded['success'])) {
             $message = $decoded['error'] ?? ('Hub returned HTTP ' . $httpCode);
-            throw new Exception($message);
+            throw new HubApiException(
+                (string) $message,
+                $httpCode,
+                $answered,
+                (string) ($decoded['code'] ?? ''),
+                is_array($decoded['details'] ?? null) ? $decoded['details'] : []
+            );
         }
 
         return $decoded['data'] ?? [];
+    }
+
+    /**
+     * Whether the configured Hub last said it supports $feature. Unknown counts as no: never
+     * answered yet, or the endpoint or API key changed since (the cache is keyed on both).
+     */
+    public function supports(string $feature): bool
+    {
+        $stored = $this->storedFeatures();
+        return $stored !== null && in_array($feature, $stored, true);
+    }
+
+    /** @return string[]|null null when nothing is known about the configured Hub */
+    private function storedFeatures(): ?array
+    {
+        try {
+            $value = Capsule::table('tblconfiguration')->where('setting', self::FEATURES_SETTING)->value('value');
+        } catch (\Throwable $e) {
+            return null;
+        }
+        $stored = json_decode((string) $value, true);
+        if (!is_array($stored) || ($stored['for'] ?? '') !== $this->fingerprint()) {
+            return null;
+        }
+        return array_values(array_map('strval', (array) ($stored['features'] ?? [])));
+    }
+
+    private function recordFeatures(string $header): void
+    {
+        $features = array_values(array_filter(array_map('trim', explode(',', $header)), 'strlen'));
+        if ($this->storedFeatures() === $features) {
+            return;
+        }
+        try {
+            \WHMCS\Config\Setting::setValue(self::FEATURES_SETTING, json_encode([
+                'for'      => $this->fingerprint(),
+                'features' => $features,
+                'at'       => gmdate('Y-m-d H:i:s'),
+            ]));
+        } catch (\Throwable $e) {
+            // A cache: a call never fails over it.
+        }
+    }
+
+    /** Which Hub, as whom: a changed endpoint or API key invalidates what is known. */
+    private function fingerprint(): string
+    {
+        return hash('sha256', $this->endpoint . "\0" . $this->apiKey);
     }
 
     /** A short, single-line, tag-stripped snippet of a raw response body for error messages. */
