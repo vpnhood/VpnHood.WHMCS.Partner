@@ -126,7 +126,36 @@ The delivered access code is shown to your customer in their **client area** for
 service. Each key also carries VpnHood's own **order id** (`upstreamOrderId`, the handle
 every lifecycle call sends) and **key id** (`accessTokenId`); both are shown on the
 service's admin page under **Module Settings**. Those are the ids VpnHood recognises —
-your own service and order ids mean nothing to them.
+your own service and order ids mean nothing to them. VpnHood's side shows your service id
+as **your reference** next to its order id, so either side can find the other.
+
+### Pressing Create again is safe
+
+Every service sends VpnHood the same one-time purchase key each time it is created. If a
+Create fails with a timeout or a gateway error while VpnHood still completed the order, press
+**Create** again: you get the same key back and are charged once. The error message says so
+("pressing Create again returns it without charging twice"). Two Creates of one service at the
+same moment also end in one purchase.
+
+The message tells you when *not* to press Create:
+
+- **"VpnHood support is finishing order #N"** — the order is paid but VpnHood must finish it.
+  A repeat is refused until then; afterwards, Create returns the finished key.
+- **"Do not press Create again — check your VpnHood account first"** — shown only if the Hub
+  you are connected to does not support safe retries (an older Hub). A repeat there buys a
+  second key.
+
+After you **Terminate** a service, its purchase key is retired: creating it again buys a new
+key, as it should.
+
+### After updating from an older connector
+
+A service whose Create failed under an older connector may already have a VpnHood order. The
+first Create after the update then stops and asks you to decide instead of buying again. Open
+the service's **Module Settings**: the **VpnHood reconcile** panel lists VpnHood's orders under
+this service's reference. Either type the right one into **Link to VpnHood order #**, or tick
+**Order a new key instead**; click **Save Changes**, then press **Create**. Linking returns
+that order's key without a charge; ordering a new key buys one.
 
 ## Troubleshooting
 
@@ -134,7 +163,8 @@ your own service and order ids mean nothing to them.
   configuration and that it is reachable over HTTPS.
 - **"Invalid API credentials" / "suspended"** – verify your API Key/Secret and that your
   partner account is active with VpnHood.
-- **"Insufficient credit"** – top up your prepaid balance with VpnHood.
+- **"Insufficient credit"** – top up your prepaid balance with VpnHood. Nothing was charged;
+  press Create again afterwards.
 - **"Order not found for this partner"** – the id sent as `upstreamOrderId` was not VpnHood's
   order id. Use the **VpnHood order id** shown on the service's admin page: never your own
   WHMCS service or order id, and never the number in a client-area URL — those are different

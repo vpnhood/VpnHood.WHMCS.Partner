@@ -26,6 +26,7 @@ if (!defined("WHMCS")) {
 require_once __DIR__ . '/lib/HubClient.php';
 
 use WHMCS\Database\Capsule;
+use WHMCS\Module\Server\VpnHoodPartner\HubApiException;
 use WHMCS\Module\Server\VpnHoodPartner\HubClient;
 
 function vpnhoodpartner_MetaData(): array
@@ -305,9 +306,15 @@ function vpnhoodpartner_cycleNotice(array $params, array $cyclesByRef, array $pa
 
 /**
  * Provision: place the order upstream and store the delivered key.
+ *
+ * Every Create of a service sends the same idempotency key, so pressing Create again — after a
+ * timeout, or concurrently — returns the order the Hub already placed instead of buying a second
+ * one. That holds only against a Hub that advertises idempotency-v1; an older Hub ignores the
+ * key and buys again, and the error messages say which of the two this is.
  */
 function vpnhoodpartner_CreateAccount(array $params): string
 {
+    $hub = null;
     try {
         // "Allow Multiple Quantities" creates one WHMCS service with quantity N (the
         // customer pays N× the price), but this connector stores exactly one upstream
@@ -323,15 +330,28 @@ function vpnhoodpartner_CreateAccount(array $params): string
         }
 
         $hub = HubClient::fromConfig();
+        $serviceId = (int) $params['serviceid'];
 
-        $data = $hub->call('order', [
+        $request = [
             'downstreamRef'     => (string) $params['configoption1'],
             // The cycle the customer chose; the Hub validates it against the upstream
             // product and rejects an unsupported cycle (purchase-time enforcement).
             'billingCycle'      => (string) ($params['model']->billingcycle ?? ''),
             'quantity'          => 1,
-            'customerReference' => (string) $params['serviceid'],
-        ]);
+            'customerReference' => (string) $serviceId,
+            'idempotencyKey'    => vpnhoodpartner_idempotencyKey($params),
+        ];
+
+        // Set on the Module tab after the Hub asked to reconcile (see AdminServicesTabFields).
+        $linkOrderId = vpnhoodpartner_property($serviceId, 'hubLinkOrderId');
+        if ($linkOrderId !== '') {
+            $data = $hub->call('linkOrder', $request + ['upstreamOrderId' => (int) $linkOrderId]);
+        } else {
+            if (vpnhoodpartner_property($serviceId, 'hubConfirmNewPurchase') === 'yes') {
+                $request['confirmNewPurchase'] = true;
+            }
+            $data = $hub->call('order', $request);
+        }
 
         if (empty($data['keys'][0])) {
             throw new Exception('Upstream order returned no key.');
@@ -349,6 +369,7 @@ function vpnhoodpartner_CreateAccount(array $params): string
             'accessCode'      => $key['accessCode'] ?? '',
             'accessTokenId'   => $key['accessTokenId'] ?? '',
         ]);
+        vpnhoodpartner_clearProperties($params, ['hubReconcile', 'hubLinkOrderId', 'hubConfirmNewPurchase']);
 
         // The FIRST key a client buys becomes their default at purchase time
         // (lifecycle §8) — parity with the hub's vpnhoodstore behaviour.
@@ -368,7 +389,146 @@ function vpnhoodpartner_CreateAccount(array $params): string
         return 'success';
     } catch (Exception $e) {
         logModuleCall('vpnhoodpartner', __FUNCTION__, $params, $e->getMessage(), $e->getTraceAsString());
-        return 'VpnHood Partner Error: ' . $e->getMessage();
+        if ($e instanceof HubApiException) {
+            vpnhoodpartner_rememberReconcile($params, $e);
+        }
+        return 'VpnHood Partner Error: ' . vpnhoodpartner_createErrorMessage($e, $hub);
+    }
+}
+
+/**
+ * This service's idempotency key: created once and saved BEFORE any order is sent, under a
+ * lock on the service, so every Create of it — concurrent ones included — sends the same key.
+ * If it cannot be saved, nothing is ordered.
+ *
+ * @throws Exception
+ */
+function vpnhoodpartner_idempotencyKey(array $params): string
+{
+    $serviceId = (int) $params['serviceid'];
+    return vpnhoodpartner_withServiceLock($serviceId, function () use ($params, $serviceId): string {
+        $key = vpnhoodpartner_property($serviceId, 'idempotencyKey');
+        if ($key === '') {
+            $params['model']->serviceProperties->save(['idempotencyKey' => bin2hex(random_bytes(16))]);
+            $key = vpnhoodpartner_property($serviceId, 'idempotencyKey');
+            if ($key === '') {
+                throw new Exception('Could not save the idempotency key of this service; nothing was ordered.');
+            }
+        }
+        return $key;
+    });
+}
+
+/**
+ * A new key for the next Create: after the Hub reported the old one spent (its order was
+ * terminated upstream), or when the admin chose to buy instead of linking.
+ */
+function vpnhoodpartner_rotateIdempotencyKey(array $params): void
+{
+    $serviceId = (int) $params['serviceid'];
+    vpnhoodpartner_withServiceLock($serviceId, function () use ($params): string {
+        $params['model']->serviceProperties->save(['idempotencyKey' => bin2hex(random_bytes(16))]);
+        return '';
+    });
+}
+
+/**
+ * Run $work holding a named lock on this service, in this WHMCS's own database.
+ *
+ * @throws Exception when another Create of the service holds it for 10 s
+ */
+function vpnhoodpartner_withServiceLock(int $serviceId, callable $work): string
+{
+    $lock = 'vhpartner-' . md5(Capsule::connection()->getDatabaseName() . "\0service\0" . $serviceId);
+    $acquired = Capsule::connection()->selectOne('SELECT GET_LOCK(?, 10) AS acquired', [$lock])->acquired;
+    if ((int) $acquired !== 1) {
+        throw new Exception('Another Create of this service is still running; try again in a moment.');
+    }
+    try {
+        return $work();
+    } finally {
+        Capsule::connection()->selectOne('SELECT RELEASE_LOCK(?) AS released', [$lock]);
+    }
+}
+
+/** Empty the given properties — only those that hold a value, so no field is created just to be blank. */
+function vpnhoodpartner_clearProperties(array $params, array $names): void
+{
+    $clear = [];
+    foreach ($names as $name) {
+        if (vpnhoodpartner_property((int) $params['serviceid'], $name) !== '') {
+            $clear[$name] = '';
+        }
+    }
+    if ($clear !== []) {
+        $params['model']->serviceProperties->save($clear);
+    }
+}
+
+/** A service property, read fresh from the database (WHMCS stores them as product custom fields). */
+function vpnhoodpartner_property(int $serviceId, string $name): string
+{
+    return (string) Capsule::table('tblcustomfieldsvalues as v')
+        ->join('tblcustomfields as f', 'f.id', '=', 'v.fieldid')
+        ->where('v.relid', $serviceId)
+        ->where('f.type', 'product')
+        ->whereRaw("LOWER(SUBSTRING_INDEX(f.fieldname, '|', 1)) = ?", [strtolower($name)])
+        ->value('v.value');
+}
+
+/**
+ * Keep what the Module tab needs to resolve a Create the Hub refused on purpose: orders of an
+ * older connector that may be this very purchase (reconcile), or an order already terminated
+ * upstream (key spent).
+ */
+function vpnhoodpartner_rememberReconcile(array $params, HubApiException $e): void
+{
+    $code = $e->getErrorCode();
+    if ($code !== 'reconcile' && $code !== 'key_spent') {
+        return;
+    }
+    try {
+        $params['model']->serviceProperties->save(['hubReconcile' => json_encode([
+            'code'    => $code,
+            'at'      => date('Y-m-d H:i'),
+            'details' => $e->getDetails(),
+        ])]);
+    } catch (Throwable $ignored) {
+        // The message still names the orders.
+    }
+}
+
+/**
+ * What the admin reads after a failed Create. Whether pressing Create again is safe depends on
+ * the Hub: only one that advertises idempotency-v1 returns the first order to a repeat — an
+ * older Hub charges again.
+ */
+function vpnhoodpartner_createErrorMessage(Exception $e, ?HubClient $hub): string
+{
+    $message = $e->getMessage();
+    if (!$e instanceof HubApiException || $hub === null) {
+        return $message;
+    }
+    $code = $e->getErrorCode();
+    $orderId = (int) ($e->getDetails()['upstreamOrderId'] ?? 0);
+    $order = $orderId > 0 ? "order #{$orderId}" : 'this order';
+
+    if (!$e->hubAnswered() || $e->getHttpStatus() >= 500 || in_array($code, ['in_progress', 'initializing', 'not_delivered'], true)) {
+        return $hub->supports(HubClient::FEATURE_IDEMPOTENCY)
+            ? $message . ' — The Hub may have completed this order; pressing Create again returns it without charging twice.'
+            : $message . ' — The order may have completed upstream. Do not press Create again: check your VpnHood'
+                . ' account first — a repeat buys a second key.';
+    }
+    switch ($code) {
+        case 'not_provisioned':
+        case 'needs_reconciliation':
+            return $message . " — VpnHood support is finishing {$order}; do not press Create, a repeat is refused until then.";
+        case 'reconcile':
+            return $message . ' — Resolve it on this service\'s Module tab: link the right order, or order a new key.';
+        case 'key_spent':
+            return $message . ' — To buy a replacement key, tick "Order a new key" on this service\'s Module tab.';
+        default:
+            return $message;
     }
 }
 
@@ -397,9 +557,21 @@ function vpnhoodpartner_UnsuspendAccount(array $params): string
     return vpnhoodpartner_relayLifecycle($params, 'unsuspend');
 }
 
+/**
+ * After a terminate, the next Create of this service is a new purchase: it gets a new key, so
+ * the Hub does not answer it with the terminated order.
+ */
 function vpnhoodpartner_TerminateAccount(array $params): string
 {
-    return vpnhoodpartner_relayLifecycle($params, 'terminate');
+    $result = vpnhoodpartner_relayLifecycle($params, 'terminate');
+    if ($result === 'success') {
+        try {
+            vpnhoodpartner_clearProperties($params, ['idempotencyKey', 'hubReconcile', 'hubLinkOrderId', 'hubConfirmNewPurchase']);
+        } catch (Throwable $e) {
+            logModuleCall('vpnhoodpartner', __FUNCTION__, $params, $e->getMessage(), $e->getTraceAsString());
+        }
+    }
+    return $result;
 }
 
 /**
@@ -462,9 +634,9 @@ function vpnhoodpartner_ClientArea(array $params): array
 function vpnhoodpartner_AdminServicesTabFields(array $params): array
 {
     try {
-        $props = $params['model']->serviceProperties;
-        $upstreamOrderId = (string) $props->get('upstreamOrderId');
-        $accessTokenId   = (string) $props->get('accessTokenId');
+        $serviceId = (int) $params['serviceid'];
+        $upstreamOrderId = vpnhoodpartner_property($serviceId, 'upstreamOrderId');
+        $accessTokenId   = vpnhoodpartner_property($serviceId, 'accessTokenId');
     }
     catch (Throwable $e) {
         return [];
@@ -479,5 +651,95 @@ function vpnhoodpartner_AdminServicesTabFields(array $params): array
         $fields['VpnHood key id'] = htmlspecialchars($accessTokenId, ENT_QUOTES, 'UTF-8');
     }
 
+    $reconcile = vpnhoodpartner_reconcileField($params);
+    if ($reconcile !== '') {
+        $fields['VpnHood reconcile'] = $reconcile;
+    }
+
     return $fields;
+}
+
+/**
+ * The reconcile panel, after the Hub refused a Create on purpose: it found orders an older
+ * connector placed under this service's reference (possibly this purchase, if their response
+ * was lost), or this service's order was terminated upstream. The admin links the right order
+ * or asks for a new key here, saves, then presses Create. Offered only while the Hub
+ * advertises idempotency-v1: an older Hub has no linkOrder, and would buy on any Create.
+ */
+function vpnhoodpartner_reconcileField(array $params): string
+{
+    $serviceId = (int) $params['serviceid'];
+    $state = json_decode(vpnhoodpartner_property($serviceId, 'hubReconcile'), true);
+    $pendingLink = vpnhoodpartner_property($serviceId, 'hubLinkOrderId');
+    $pendingNew = vpnhoodpartner_property($serviceId, 'hubConfirmNewPurchase') === 'yes';
+    if (!is_array($state) && $pendingLink === '' && !$pendingNew) {
+        return '';
+    }
+    $esc = fn ($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
+
+    try {
+        $supported = HubClient::fromConfig()->supports(HubClient::FEATURE_IDEMPOTENCY);
+    } catch (Throwable $e) {
+        $supported = false;
+    }
+    if (!$supported) {
+        return '<em>The Hub no longer reports idempotency-v1, so linking is unavailable and any Create buys a new key.'
+            . ' Check your VpnHood account before pressing Create.</em>';
+    }
+
+    $html = '';
+    if ($pendingLink !== '') {
+        $html .= '<div class="alert alert-info" style="margin-bottom:6px">Pending: link to VpnHood order <b>#' . $esc($pendingLink)
+            . '</b>. Press <b>Create</b> to finish — it returns that order\'s key without charging.</div>';
+    } elseif ($pendingNew) {
+        $html .= '<div class="alert alert-warning" style="margin-bottom:6px">Pending: a <b>new</b> key. Press <b>Create</b> to buy it'
+            . ' (charged to your VpnHood credit).</div>';
+    }
+
+    if (is_array($state) && ($state['code'] ?? '') === 'reconcile') {
+        $rows = '';
+        foreach ((array) ($state['details']['candidates'] ?? []) as $c) {
+            $status = (string) ($c['status'] ?? '');
+            $rows .= '<tr><td>#' . (int) ($c['upstreamOrderId'] ?? 0) . '</td><td>' . $esc($c['product'] ?? '') . '</td><td>'
+                . $esc($c['billingCycle'] ?? '') . '</td><td>' . $esc($status)
+                . ($status === 'Pending' ? ' <em>(being finished by VpnHood support; cannot be linked yet)</em>' : '')
+                . '</td><td>' . $esc($c['placedAt'] ?? '') . '</td></tr>';
+        }
+        $html .= '<p>VpnHood already has order(s) under this service\'s reference, placed without a key (' . $esc($state['at'] ?? '')
+            . '). If one of them is this service\'s key, link it; otherwise order a new key.</p>'
+            . '<table class="table table-condensed" style="width:auto"><tr><th>Order</th><th>Product</th><th>Cycle</th>'
+            . '<th>Status</th><th>Placed</th></tr>' . $rows . '</table>';
+    } elseif (is_array($state) && ($state['code'] ?? '') === 'key_spent') {
+        $html .= '<p>This service\'s VpnHood order #' . (int) ($state['details']['upstreamOrderId'] ?? 0) . ' is '
+            . $esc($state['details']['status'] ?? 'terminated') . ' upstream (' . $esc($state['at'] ?? '')
+            . '). Its key cannot be delivered again.</p>';
+    }
+
+    $html .= '<div class="form-inline">'
+        . (is_array($state) && ($state['code'] ?? '') === 'reconcile'
+            ? '<label style="font-weight:normal;margin-right:12px">Link to VpnHood order # <input type="text" name="vhLinkOrderId" size="8" class="form-control input-sm"></label>'
+            : '')
+        . '<label style="font-weight:normal"><input type="checkbox" name="vhOrderNewKey" value="1"> Order a new key instead (charged to your credit)</label>'
+        . '</div><small class="text-muted">Then click <b>Save Changes</b>, and press <b>Create</b>.</small>';
+    return $html;
+}
+
+/** Store the admin's reconcile choice from the Module tab; the next Create acts on it. */
+function vpnhoodpartner_AdminServicesTabFieldsSave(array $params): void
+{
+    $link = trim((string) ($_POST['vhLinkOrderId'] ?? ''));
+    $newKey = !empty($_POST['vhOrderNewKey']);
+    try {
+        if ($newKey) {
+            // A new purchase must not replay the old key's order: new key, explicit confirmation.
+            vpnhoodpartner_rotateIdempotencyKey($params);
+            $params['model']->serviceProperties->save(['hubConfirmNewPurchase' => 'yes']);
+            vpnhoodpartner_clearProperties($params, ['hubLinkOrderId']);
+        } elseif ($link !== '' && ctype_digit($link)) {
+            $params['model']->serviceProperties->save(['hubLinkOrderId' => $link]);
+            vpnhoodpartner_clearProperties($params, ['hubConfirmNewPurchase']);
+        }
+    } catch (Throwable $e) {
+        logModuleCall('vpnhoodpartner', __FUNCTION__, $params, $e->getMessage(), $e->getTraceAsString());
+    }
 }
