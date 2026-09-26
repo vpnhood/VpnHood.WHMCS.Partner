@@ -574,6 +574,55 @@ function vpnhoodpartner_TerminateAccount(array $params): string
     return $result;
 }
 
+/** The admin-only Refund button on the service page (docs/DEVELOPMENT.md, "Refund"). */
+function vpnhoodpartner_AdminCustomButtonArray(): array
+{
+    return ['Refund' => 'Refund'];
+}
+
+/**
+ * Refund this key upstream: inside the Hub's refund window, the Hub ends the key and returns
+ * what the order cost to your VpnHood credit; a renewed key is never refundable. The service is
+ * then finished here without a second Hub call. If that step fails, pressing Refund again
+ * finishes it: the Hub answers a repeated refund without paying twice.
+ */
+function vpnhoodpartner_Refund(array $params): string
+{
+    try {
+        $upstreamOrderId = vpnhoodpartner_upstreamOrderId($params);
+        $data = HubClient::fromConfig()->call('refund', ['upstreamOrderId' => $upstreamOrderId]);
+    } catch (Exception $e) {
+        logModuleCall('vpnhoodpartner', __FUNCTION__, $params, $e->getMessage(), $e->getTraceAsString());
+        // A Hub that predates refunds answers the action as unknown; nothing happened upstream.
+        $unsupported = $e instanceof HubApiException && $e->getHttpStatus() === 404 && stripos($e->getMessage(), 'Unknown action') !== false;
+        return 'VpnHood Partner Error: ' . ($unsupported
+            ? 'your VpnHood Partner Hub does not offer refunds yet; nothing was changed. Ask VpnHood support to refund this order.'
+            : $e->getMessage());
+    }
+
+    $amount = (string) ($data['amount'] ?? '');
+    try {
+        if ((string) $params['model']->domainstatus !== 'Terminated') {
+            $result = localAPI('UpdateClientProduct', [
+                'serviceid'       => (int) $params['serviceid'],
+                'status'          => 'Terminated',
+                'terminationdate' => date('Y-m-d'),
+            ]);
+            if (($result['result'] ?? '') !== 'success') {
+                throw new Exception((string) ($result['message'] ?? 'UpdateClientProduct failed'));
+            }
+        }
+        vpnhoodpartner_clearProperties($params, ['idempotencyKey', 'hubReconcile', 'hubLinkOrderId', 'hubConfirmNewPurchase']);
+    } catch (Throwable $e) {
+        logModuleCall('vpnhoodpartner', __FUNCTION__, $params, $e->getMessage(), $e->getTraceAsString());
+        return "VpnHood Partner Error: VpnHood refunded order #{$upstreamOrderId} ({$amount} returned to your credit), but"
+            . ' marking this service Terminated failed: ' . $e->getMessage() . '. Press Refund again to finish.';
+    }
+    logActivity("VpnHood Partner: order #{$upstreamOrderId} refunded; its key has ended and {$amount} was returned to your"
+        . ' VpnHood credit - Service ID: ' . (int) $params['serviceid'], (int) $params['userid']);
+    return 'success';
+}
+
 /**
  * Shared lifecycle relay to the upstream Hub.
  */
