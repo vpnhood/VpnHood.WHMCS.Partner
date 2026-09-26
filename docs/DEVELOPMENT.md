@@ -130,6 +130,7 @@ Covered by `tests/integration/sync-products.test.sh` in the **VpnHood.WHMCS** re
 | `_SuspendAccount` | `suspend` | forwards WHMCS's `suspendreason` upstream as `suspendReason` |
 | `_UnsuspendAccount` | `unsuspend` | |
 | `_TerminateAccount` | `terminate` | then clears the service's key: the next Create is a new purchase |
+| `_Refund` (admin button, `_AdminCustomButtonArray`) | `refund` | then sets the service Terminated here and clears the key, with no second Hub call (see *Refund*) |
 | `_ClientArea` | — | renders the stored `accessCode` directly; no Hub call on page view |
 | `_AdminServicesTabFields` / `…Save` | — | the Module tab: order and key ids; the reconcile panel (below) |
 
@@ -143,6 +144,35 @@ generates a renewal invoice and leaves it Unpaid until `renew` settles it from t
 credit. `renew` therefore no longer takes `nextDueDate` — the upstream derives the new term
 when the invoice is paid. If the upstream has not generated that invoice yet, `renew` returns
 **409** and `_Renew` fails loudly rather than reporting a renewal that did not happen.
+
+**Termination is final upstream.** The Hub refuses `suspend`, `unsuspend` and `renew` of an
+order whose service has ended (Terminated, Cancelled or Fraud) with `409 service_ended`, so no
+sequence of calls brings back a key that was terminated or refunded; the connector shows the
+message. The Hub also runs one action per partner account at a time; a call that waits more
+than 15 s answers `409 in_progress` (press the button again).
+
+## Refund
+
+The admin-only **Refund** button (`vpnhoodpartner_AdminCustomButtonArray` →
+`vpnhoodpartner_Refund`) sends `refund`. Inside the Hub's refund window (3 days after payment by
+default; VpnHood sets it) the Hub ends the key and returns what the order cost to the
+partner's VpnHood credit, on an Active, Suspended or already Terminated service alike. Only a
+key's first purchase is refundable: a renewed key, or one with any later invoice, answers `409
+not_refundable`; after the window, `409 refund_window_closed`, and Terminate still ends the key
+without returning credit. The Hub's rules and their reasons are in its addon `README.md`
+(*Refunds*) and `docs/ARCHITECTURE.md`.
+
+On success the connector finishes **here, without a second Hub call**: the service is set
+Terminated (`UpdateClientProduct`) and the same properties Terminate clears are cleared, so
+the next Create is a new purchase. A second Hub call (`ModuleTerminate` relaying `terminate`)
+was rejected: if it failed, the partner would be credited upstream with the service still
+Active here. If the local step fails, the message says to press Refund again: the Hub answers
+a repeated refund with `refunded` and returns nothing more, and the local step runs again. The
+refund is logged in this WHMCS's activity log with the amount.
+
+There is no feature flag: a Hub that predates refunds answers `404 Unknown action` and changes
+nothing, and the connector says the Hub "does not offer refunds yet". The button refunds
+VpnHood's side only; the partner refunds their own customer in their own WHMCS.
 
 ## Create is safe to repeat (against a Hub with `idempotency-v1`)
 
@@ -199,6 +229,7 @@ of a Hub that has them. `HubClient::call` unwraps `data` and throws `HubApiExcep
 | `renew` | `upstreamOrderId` | `status, nextDueDate` (**409** when no renewal invoice is outstanding yet) |
 | `suspend` | `upstreamOrderId`, `suspendReason?` | `status` |
 | `unsuspend` / `terminate` / `cancel` | `upstreamOrderId` | `status` |
+| `refund` | `upstreamOrderId` | `status: "refunded", amount` (the same on a repeat) |
 | `getOrder` | `upstreamOrderId` | `status, nextDueDate` |
 | `getAccessCode` | `upstreamOrderId` | `deliveryType`, `accessTokenId + accessCode` or `csv` |
 | `getTransactions` | — | `transactions[]` |
@@ -209,7 +240,7 @@ one unit, once: `quantity` must be 1, and a repeat with a different product, cyc
 
 | `code` | HTTP | Meaning |
 |--------|------|---------|
-| `in_progress` / `initializing` | 409 | a request with this key (or the Hub's first-use setup) is still running — retry |
+| `in_progress` / `initializing` | 409 | a request with this key, another action on the same account, or the Hub's first-use setup is still running — retry |
 | `reconcile` | 409 | keyless live orders exist under this `customerReference`; `details.candidates[]` = `{ upstreamOrderId, product, billingCycle, status, placedAt }` |
 | `key_mismatch` | 409 | the key belongs to a different request (or `linkOrder`: to a different order) |
 | `key_spent` | 409 | the key's order is terminated or cancelled; a replacement needs a new key |
@@ -217,6 +248,10 @@ one unit, once: `quantity` must be 1, and a repeat with a different product, cyc
 | `not_delivered` | 409 | provisioned, the key could not be read; repeat the request, or `getAccessCode` |
 | `insufficient_credit` | 402 | nothing was charged; top up and repeat (the key is free again) |
 | `already_claimed` / `link_rejected` | 409 / 404 | `linkOrder` only: another key has that order, or it is not this purchase |
+| `service_ended` | 409 | `suspend`, `unsuspend` or `renew` of an ended order (`details.status`); buy a new key |
+| `refund_window_closed` | 409 | `refund` after the window, or refunds turned off; nothing changed |
+| `not_refundable` | 409 | `refund` of an order the API does not refund (renewed, a later invoice, not bought through the Hub, …); nothing changed |
+| `refund_incomplete` | 409 | `refund` ended the key but could not return the credit; VpnHood support finishes it |
 
 > `upstreamOrderId` is the upstream WHMCS **order id** and is the handle for every action.
 > The Hub resolves it to the underlying service itself, scoped to the calling partner, so an
@@ -248,7 +283,7 @@ WHMCS keeps them as admin-only product custom fields, created on first save:
 - `accessTokenId` — the upstream token id: the handle that is unambiguous across both
   installs when support has to name a key.
 - `isDefaultKey` — `yes` on the client's first key (parity with the Hub's store module).
-- `idempotencyKey` — sent with every Create of the service; cleared by Terminate.
+- `idempotencyKey` — sent with every Create of the service; cleared by Terminate and Refund.
 - `hubReconcile`, `hubLinkOrderId`, `hubConfirmNewPurchase` — the reconcile panel's state and
   the admin's choice; cleared by the Create that acts on them.
 

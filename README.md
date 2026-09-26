@@ -120,7 +120,8 @@ warning when they do not — so you find out here rather than when a customer's 
 | Renewal | `renew` → keeps the upstream key's expiry in sync |
 | Suspend | `suspend` → suspends the upstream key |
 | Unsuspend | `unsuspend` → reactivates the upstream key |
-| Terminate / Cancel | `terminate` → expires the upstream key |
+| Terminate / Cancel | `terminate` → expires the upstream key (no credit is returned) |
+| **Refund** (admin button) | `refund` → expires the upstream key and returns its price to your VpnHood credit, inside the refund window |
 
 The delivered access code is shown to your customer in their **client area** for the
 service. Each key also carries VpnHood's own **order id** (`upstreamOrderId`, the handle
@@ -148,6 +149,23 @@ The message tells you when *not* to press Create:
 After you **Terminate** a service, its purchase key is retired: creating it again buys a new
 key, as it should.
 
+### Refunds and switching a key off
+
+To undo a sale, open the service and press **Refund**. Inside VpnHood's refund window (3 days
+after VpnHood was paid for that key, unless VpnHood has set another), the key ends at once, what it cost you returns to your VpnHood credit, and the service is marked Terminated. It
+works on a suspended or already terminated service too, and pressing it twice returns the
+credit once. It refunds VpnHood's side only: refund your own customer in your WHMCS as usual.
+
+- Only a key's **first purchase** can be refunded. A renewed key, or one that already has a
+  renewal invoice, cannot; Refund says so and changes nothing.
+- **After the window** Refund says so and changes nothing. **Terminate** still ends the key,
+  but its credit is not returned.
+- **Suspend** switches a key off and **Unsuspend** turns it back on, for example while a
+  chargeback is open. Once a key is terminated or refunded it stays ended: suspend, unsuspend
+  and renew are refused.
+- You need no management code (mcode.vpnhood.com) for these keys: Suspend, Terminate and Refund
+  act on them directly, at any time.
+
 ### After updating from an older connector
 
 A service whose Create failed under an older connector may already have a VpnHood order. The
@@ -170,6 +188,13 @@ that order's key without a charge; ordering a new key buys one.
   WHMCS service or order id, and never the number in a client-area URL — those are different
   sequences, and the same number is live upstream for another customer. When in doubt quote
   the **VpnHood key id** instead; it cannot collide.
+- **"does not offer refunds yet"** – the VpnHood Partner Hub you are connected to predates
+  refunds; nothing was changed. Ask VpnHood support to refund the order.
+- **"The refund window of order #N closed"** / **"Only a key's first purchase is refundable"**
+  – nothing was changed; Terminate the service to end the key (no credit is returned), or
+  contact VpnHood support.
+- **"an ended key cannot be suspended / unsuspended / renewed"** – the key was terminated or
+  refunded upstream; sell a new key instead.
 - All errors are recorded under **Utilities → Logs → Module Log** (search `vpnhoodpartner`).
 
 ## License
