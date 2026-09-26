@@ -43,7 +43,7 @@ function vpnhoodpartnerconfig_config()
         'name'        => 'VpnHood Partner Connector Configuration',
         'description' => 'Connection to your provider\'s VpnHood! Partner Hub. '
             . 'The VpnHood Partner Connector server module reads these settings.',
-        'version'     => '1.2.3',
+        'version'     => '1.2.4',
         'author'      => 'VpnHood!',
 
         'fields' => [
