@@ -252,6 +252,7 @@ one unit, once: `quantity` must be 1, and a repeat with a different product, cyc
 | `refund_window_closed` | 409 | `refund` after the window, or refunds turned off; nothing changed |
 | `not_refundable` | 409 | `refund` of an order the API does not refund (renewed, a later invoice, not bought through the Hub, …); nothing changed |
 | `refund_incomplete` | 409 | `refund` ended the key but could not return the credit; VpnHood support finishes it |
+| `renewal_blocked` | 409 | `renew` of a key whose renewal invoice also bills ended keys and already has a payment on it; nothing was paid, VpnHood support fixes the invoice |
 
 > `upstreamOrderId` is the upstream WHMCS **order id** and is the handle for every action.
 > The Hub resolves it to the underlying service itself, scoped to the calling partner, so an
