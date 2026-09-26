@@ -154,7 +154,7 @@ than 15 s answers `409 in_progress` (press the button again).
 ## Refund
 
 The admin-only **Refund** button (`vpnhoodpartner_AdminCustomButtonArray` →
-`vpnhoodpartner_Refund`) sends `refund`. Inside the Hub's refund window (3 days after payment by
+`vpnhoodpartner_Refund`) sends `refund`. Inside the Hub's refund window (7 days after payment by
 default; VpnHood sets it) the Hub ends the key and returns what the order cost to the
 partner's VpnHood credit, on an Active, Suspended or already Terminated service alike. Only a
 key's first purchase is refundable: a renewed key, or one with any later invoice, answers `409

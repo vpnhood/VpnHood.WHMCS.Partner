@@ -151,7 +151,7 @@ key, as it should.
 
 ### Refunds and switching a key off
 
-To undo a sale, open the service and press **Refund**. Inside VpnHood's refund window (3 days
+To undo a sale, open the service and press **Refund**. Inside VpnHood's refund window (7 days
 after VpnHood was paid for that key, unless VpnHood has set another), the key ends at once, what it cost you returns to your VpnHood credit, and the service is marked Terminated. It
 works on a suspended or already terminated service too, and pressing it twice returns the
 credit once. It refunds VpnHood's side only: refund your own customer in your WHMCS as usual.
