@@ -22,4 +22,4 @@ Dev-test topology: hub **and** connector are installed on the **same** dev
 WHMCS. That works because the connector talks to the Hub over plain HTTPS —
 it does not care that the Hub is the same install. Margin in the test data:
 buyer pays $3.00 for the connector product, the connector orders upstream at
-$2.00 from the reseller's credit.
+$1.75 from the reseller's credit.

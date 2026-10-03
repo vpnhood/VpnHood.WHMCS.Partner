@@ -11,8 +11,8 @@ stop at any of them:
 Layer 1  Your web store        your WHMCS + this connector      sell keys under your brand
 Layer 2  Your branded apps     your builds of the open-source   your name, icon and package
                                VpnHood client                   on the stores
-Layer 3  In-app purchases      the bundled vpnhoodiap addon     Google Play / App Store sales
-                               on your WHMCS                    land as orders in YOUR store
+Layer 3  In-app purchases      the vpnhoodiap addon (its own    Google Play / App Store sales
+                               release) on your WHMCS           land as orders in YOUR store
 ```
 
 At every layer the plumbing is the same: an order in **your WHMCS** is paid from
@@ -50,9 +50,9 @@ right app template and the branding surface for your case.
 
 ## Layer 3 — in-app purchases in your apps
 
-`vpnhoodpartner.zip` bundles the **vpnhoodiap** addon (it stays inactive until
-you configure it). With Layers 1–2 in place, it turns purchases made *inside*
-your branded apps into normal orders in your WHMCS:
+The **vpnhoodiap** addon is a package of its own, installed from its own release
+beside this connector (setup below). With Layers 1–2 in place, it turns purchases
+made *inside* your branded apps into normal orders in your WHMCS:
 
 ```text
 customer buys in your app ─▶ Google/Apple pays YOU (you are the merchant)
