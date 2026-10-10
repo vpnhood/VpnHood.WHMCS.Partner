@@ -359,8 +359,8 @@ function vpnhoodpartner_CreateAccount(array $params): string
         $key = $data['keys'][0];
 
         // Persist what later steps need: the upstream ORDER id (required by every lifecycle
-        // relay), the delivered access code (client-area display, and the exact-match side of
-        // claim-by-code — the IAP module searches this property), and the upstream token id.
+        // relay), the delivered access code (client-area display, and what the IAP module reads
+        // to deliver it), and the upstream token id.
         // The token id is never sent anywhere; it is kept because it is the one handle that is
         // unambiguous across both installs, so a support exchange can name a key without
         // trading id numbers that exist on both sides for different records.
@@ -371,8 +371,8 @@ function vpnhoodpartner_CreateAccount(array $params): string
         ]);
         vpnhoodpartner_clearProperties($params, ['hubReconcile', 'hubLinkOrderId', 'hubConfirmNewPurchase']);
 
-        // The FIRST key a client buys becomes their default at purchase time
-        // (lifecycle §8) — parity with the hub's vpnhoodstore behaviour.
+        // TODO: drop in the next release, with the hub's vpnhoodstore: nothing reads isDefaultKey
+        // since the IAP module's keyring (vpnhoodiap 1.2.0); only tests assert it.
         $clientHasDefault = Capsule::table('tblhosting as h')
             ->join('tblcustomfieldsvalues as v', 'v.relid', '=', 'h.id')
             ->join('tblcustomfields as f', 'f.id', '=', 'v.fieldid')
