@@ -71,6 +71,11 @@ VpnHood packages on the install do not fit each other. It never installs anythin
 updating is always the steps above. The check needs outbound HTTPS to `api.github.com`; where
 that is blocked the panel simply says the check failed.
 
+If you installed the connector before 1.2.1, the daily check needs one more step, once: open
+**System Settings → Addon Modules**, click **Configure** next to **VpnHood Partner Connector
+Configuration** and **Save Changes** without changing anything. WHMCS starts running the
+connector's daily tasks only then; your settings stay as they are.
+
 ## Product setup
 
 ### The quick way: sync the products VpnHood offers you

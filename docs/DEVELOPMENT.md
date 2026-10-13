@@ -330,6 +330,14 @@ idempotent — partners jump several versions at once, and a failed upgrade is r
 the next admin page load. **Extracting the zip only adds and overwrites**: when a
 release deletes a module file, `unlink()` it there or partners keep running dead code.
 
+WHMCS calls it only on an admin page load, so until a partner's admin visits, the new code
+runs against the old data. The hub's addons call theirs from the cron instead (`AfterCronJob`
+→ `<module>_runPendingUpgrade()`, VpnHood.WHMCS `docs/ARCHITECTURE.md`, "Versioning &
+releases"): give this addon the same in the release that brings its first migration. Its
+`hooks.php` came in 1.2.1, and WHMCS loads it only for addons in its hook list, written at
+activation and rebuilt when an admin presses Save Changes on any addon's Configure form: an
+install activated earlier needs that one save (README, "Updating").
+
 ## Releasing
 
 `.github/workflows/release.yml`, run by hand — nothing releases on push.
