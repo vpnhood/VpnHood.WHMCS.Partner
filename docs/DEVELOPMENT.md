@@ -126,7 +126,7 @@ Covered by `tests/integration/sync-products.test.sh` in the **VpnHood.WHMCS** re
 | WHMCS hook | Hub action | Notes |
 |------------|-----------|-------|
 | `_CreateAccount` | `order` (or `linkOrder`) | sends the service's `billingCycle`, its id as `customerReference` and its `idempotencyKey`; stores `upstreamOrderId` + `accessCode` + `accessTokenId` |
-| `_Renew` | `renew` | settles the outstanding upstream renewal invoice from partner credit |
+| `_Renew` | `renew` | pays one upstream cycle from partner credit, or nothing when a full cycle is already paid (`current`) |
 | `_SuspendAccount` | `suspend` | forwards WHMCS's `suspendreason` upstream as `suspendReason` |
 | `_UnsuspendAccount` | `unsuspend` | |
 | `_TerminateAccount` | `terminate` | then clears the service's key: the next Create is a new purchase |
@@ -141,9 +141,15 @@ connector.
 
 **Renewal is manual upstream.** Recurring Hub products do not auto-renew: the upstream WHMCS
 generates a renewal invoice and leaves it Unpaid until `renew` settles it from the partner's
-credit. `renew` therefore no longer takes `nextDueDate` — the upstream derives the new term
-when the invoice is paid. If the upstream has not generated that invoice yet, `renew` returns
-**409** and `_Renew` fails loudly rather than reporting a renewal that did not happen.
+credit. `renew` takes no `nextDueDate` — the upstream derives the new term when the invoice is
+paid. It pays one cycle whenever less than a full cycle is left, generating the upstream invoice
+itself if WHMCS has not yet; with a full cycle or more still paid it charges nothing and answers
+`status: current` (a success), so a partner never holds two cycles. A renewal a customer pays a
+full cycle or more ahead therefore extends nothing upstream, and the key would end a cycle before
+the term they paid for: keep WHMCS's Invoice Generation lead time (Automation Settings, and its
+per-cycle overrides) shorter than the cycle. A lapsed term renews from the day of the renewal. A new key's first term ends a day after its cycle, and the key expires
+at the hour its order was placed, so it still runs when an app store renews the subscription
+that day. The `_Renew` hook can therefore run at any time, an in-app renewal included.
 
 **Termination is final upstream.** The Hub refuses `suspend`, `unsuspend` and `renew` of an
 order whose service has ended (Terminated, Cancelled or Fraud) with `409 service_ended`, so no
@@ -226,7 +232,7 @@ of a Hub that has them. `HubClient::call` unwraps `data` and throws `HubApiExcep
 | `getProducts` | — | `products[] { downstreamRef, name, paymentType, allowMultipleQuantities, billingCycleMonths, availableCycles }` |
 | `order` | `downstreamRef`, `billingCycle?`, `quantity?`, `customerReference?`, `idempotencyKey?`, `confirmNewPurchase?` | `replayed`, `keys[] { upstreamOrderId, customerReference, deliveryType, accessTokenId + accessCode \| csv }` |
 | `linkOrder` | `idempotencyKey`, `upstreamOrderId`, `downstreamRef`, `billingCycle?`, `customerReference?` | as `order`, plus `linked: true` |
-| `renew` | `upstreamOrderId` | `status, nextDueDate` (**409** when no renewal invoice is outstanding yet) |
+| `renew` | `upstreamOrderId` | `status` (`renewed`, or `current` when a full cycle is already paid), `nextDueDate` |
 | `suspend` | `upstreamOrderId`, `suspendReason?` | `status` |
 | `unsuspend` / `terminate` / `cancel` | `upstreamOrderId` | `status` |
 | `refund` | `upstreamOrderId` | `status: "refunded", amount` (the same on a repeat) |

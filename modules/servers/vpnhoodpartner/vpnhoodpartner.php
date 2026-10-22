@@ -535,10 +535,11 @@ function vpnhoodpartner_createErrorMessage(Exception $e, ?HubClient $hub): strin
 /**
  * Relay a renewal upstream.
  *
- * The Hub no longer accepts a nextDueDate override: upstream renewal settles the
- * outstanding upstream renewal invoice from the partner's credit, and WHMCS derives the
- * new term from that. If the upstream has not generated its renewal invoice yet, the Hub
- * answers 409 and this fails loudly rather than reporting a renewal that did not happen.
+ * The Hub takes no nextDueDate: it pays one cycle from the partner's credit whenever less
+ * than a full cycle is left (its renewal invoice generated on the spot if WHMCS has not made
+ * it yet), and answers `current` without charging while a full cycle is still paid, so a
+ * repeat never pays twice. Any error fails loudly rather than reporting a renewal that did
+ * not happen.
  */
 function vpnhoodpartner_Renew(array $params): string
 {

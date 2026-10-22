@@ -96,7 +96,10 @@ In outline, both follow the same shape:
 1. Install the **`vpnhoodiap`** package (its own release —
    [VpnHood.WHMCS.Iap](https://github.com/vpnhood/VpnHood.WHMCS.Iap/releases/latest),
    extracted at your WHMCS root), then activate the **VpnHood! IAP** addon and the
-   **vpnhoodiappay** payment gateway in WHMCS admin.
+   **vpnhoodiappay** payment gateway in WHMCS admin. On WHMCS 9.1 or later, also set
+   **Invoice Immutability** (General Settings → Invoices) to *Immutability disabled
+   (billing notes still enabled)*: the addon corrects and cancels store invoices, which
+   9.1's default refuses.
 2. **Apps tab**: register each of your store apps — package/bundle id, the OAuth
    client ids your app's sign-in uses, and the store credentials (stored
    encrypted, write-only). Saving generates the app's unique webhook URL; give
@@ -136,6 +139,7 @@ obligation to VpnHood is keeping the prepaid credit topped up.
 
 - [ ] Layer 1: WHMCS + connector installed, products synced, prices set
 - [ ] Layer 2: branded app builds published from your own developer accounts
+- [ ] Layer 3 on WHMCS 9.1+: Invoice Immutability set to *Immutability disabled (billing notes still enabled)*
 - [ ] Layer 3: [Google Play setup](https://github.com/vpnhood/VpnHood.WHMCS.Iap/blob/main/docs/IAP-GOOGLE-PLAY.md) completed for your Android app
 - [ ] Layer 3: [Apple App Store setup](https://github.com/vpnhood/VpnHood.WHMCS.Iap/blob/main/docs/IAP-APPLE-APP-STORE.md) completed for your iOS app
 - [ ] Sandbox/internal-testing purchase verified end-to-end before going live
