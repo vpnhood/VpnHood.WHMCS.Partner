@@ -55,6 +55,10 @@ VpnHood will give you:
    Leave **Skip TLS Verification** un-ticked — it is for development against a
    self-signed Hub and must never be enabled on a live store.
 
+   **Clear Ticket IP Addresses** is off, as WHMCS has it: WHMCS keeps the IP address of a client
+   who opens a support ticket and shows it on the ticket. Tick it to keep none; the IP addresses
+   already on your tickets are cleared overnight.
+
 ## Updating
 
 Download the new zip and repeat steps 1–3. Extracting over the top replaces the module files and

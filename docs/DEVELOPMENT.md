@@ -58,6 +58,15 @@ no WHMCS "Server" to set up.
 The API path `/modules/addons/vpnhoodpartnerhub/api.php` is appended automatically
 (`HubClient::API_PATH`).
 
+The addon also holds `ClearTicketIpAddresses` (yesno, off while unset), which nothing in the
+connection reads: while it is on, the addon's `hooks.php` keeps no IP address on tickets. WHMCS
+records the client's IP on the message that opens a ticket from the client area and on each
+ticket rating, and no WHMCS setting turns that off; `TicketOpen` and `TicketOpenAdmin` clear the
+new ticket's, and the daily cron clears the rest (ratings, and tickets stored before). The hub
+package carries the same option under its own function names (VpnHood.WHMCS
+`includes/hooks/vpnhood-ticket-ip.php`), so an install running both packages loads both. Covered
+by the hub repo's `tests/integration/ticket-ip.test.sh`.
+
 Product config option `configoption1` = **Upstream Product** (`downstreamRef`). It is a
 **dropdown** populated live from the Hub (`getProducts`), so the partner picks from exactly
 the products the provider mapped to their account. `_ConfigOptions` also renders a config-time

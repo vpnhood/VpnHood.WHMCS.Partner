@@ -83,6 +83,16 @@ function vpnhoodpartnerconfig_config()
                     . 'Never enable in production.',
                 'Default'      => '',
             ],
+
+            'ClearTicketIpAddresses' => [
+                'FriendlyName' => 'Clear Ticket IP Addresses',
+                'Type'         => 'yesno',
+                'Description'  => 'Keep no IP address on tickets. WHMCS records the client\'s IP when they open a '
+                    . 'ticket and shows it under the first message, to the client and in the admin area: it is '
+                    . 'cleared as the ticket opens, and the daily cron clears those already stored and those on '
+                    . 'ticket ratings.',
+                'Default'      => '',
+            ],
         ],
     ];
 }
