@@ -4,22 +4,22 @@ The partner connector is more than resale: it is the foundation for a complete
 VPN brand of your own. Your storefront, your prices, your apps, your app-store
 listings — with VpnHood invisible behind them, running the infrastructure.
 
-White-labeling has three layers. Each one builds on the previous, and you can
-stop at any of them:
+White label is this connector plus your own app. In-app purchases are an option
+you can add:
 
 ```text
-Layer 1  Your web store        your WHMCS + this connector      sell keys under your brand
-Layer 2  Your branded apps     your builds of the open-source   your name, icon and package
+Required  Your web store       your WHMCS + this connector      sell premium codes under your brand
+Required  Your branded apps    your builds of the open-source   your name, icon and package
                                VpnHood client                   on the stores
-Layer 3  In-app purchases      the vpnhoodiap addon (its own    Google Play / App Store sales
+Optional  In-app purchases     the vpnhoodiap addon (its own    Google Play / App Store sales
                                release) on your WHMCS           land as orders in YOUR store
 ```
 
-At every layer the plumbing is the same: an order in **your WHMCS** is paid from
-your **prepaid credit** with VpnHood, provisions a key upstream, and delivers the
+Every sale works the same way: an order in **your WHMCS** is paid from your
+**prepaid credit** with VpnHood, provisions a key upstream, and delivers the
 premium code to your customer. You set retail prices; the margin is yours.
 
-## Layer 1 — your web store
+## Your web store
 
 This is the connector's core and is fully covered by the [README](../README.md):
 install `vpnhoodpartner.zip`, configure your API key/secret, sync or create
@@ -29,29 +29,29 @@ in their client area, and redeem it in a VpnHood-compatible client app.
 Everything your customer sees — the storefront, invoices, emails, support — is
 your brand. VpnHood never appears in the transaction.
 
-## Layer 2 — your branded apps
+## Your branded apps
 
-The VpnHood client apps are open source (LGPL-2.1), and the app's entire visual
-identity lives in its bundled web UI package — so a branded build is your own
-name, icon, colors and package/bundle id on top of the maintained engine.
+The VpnHood client apps are open source (LGPL-2.1), so a branded build is your
+own name, logo, icon and package/bundle id on top of the maintained engine.
 
 What this means in practice:
 
 - **You own the store listings.** The apps are published from **your** Google
-  Play / Apple developer accounts, under your brand. VpnHood cannot publish them
-  for you — the stores tie in-app products and payouts to the publisher account.
+  Play / Apple developer accounts, under your brand, because the stores tie in-app
+  products and payouts to the publisher account. You can publish them yourself,
+  or VpnHood can do it for you as a separate service.
 - **You track upstream releases.** Your build inherits engine fixes by rebuilding
   on new VpnHood releases; the LGPL terms travel with the code.
-- **Access codes just work.** A customer who bought on your web store (Layer 1)
-  enters their premium code in your branded app — no extra integration needed.
+- **Premium codes just work.** A customer who bought on your web store enters
+  their premium code in your branded app — no extra integration needed.
 
 Talk to VpnHood before starting a branded app: the team will point you at the
 right app template and the branding surface for your case.
 
-## Layer 3 — in-app purchases in your apps
+## In-app purchases in your apps (optional)
 
 The **vpnhoodiap** addon is a package of its own, installed from its own release
-beside this connector (setup below). With Layers 1–2 in place, it turns purchases
+beside this connector (setup below). With your store and apps in place, it turns purchases
 made *inside* your branded apps into normal orders in your WHMCS:
 
 ```text
@@ -67,7 +67,7 @@ service, invoices and the upstream key in sync — including revoking refunded
 purchases. App-store sales, web sales and support all live in the one WHMCS
 panel you already run.
 
-### What you need for Layer 3
+### What you need for in-app purchases
 
 These are **your** accounts and credentials — in-app purchases are always paid
 to the app's publisher, so none of this can be shared with or provided by
@@ -126,9 +126,9 @@ integration at the right version.
 
 ## The money, in one picture
 
-- **Web sale (Layer 1):** customer pays *your* payment gateway → your WHMCS
+- **Web sale:** customer pays *your* payment gateway → your WHMCS
   order → wholesale key paid from your VpnHood credit.
-- **In-app sale (Layer 3):** customer pays Google/Apple → the store pays *you*
+- **In-app sale:** customer pays Google/Apple → the store pays *you*
   (minus its cut) → your WHMCS order records the sale → wholesale key paid from
   your VpnHood credit.
 
@@ -137,12 +137,12 @@ obligation to VpnHood is keeping the prepaid credit topped up.
 
 ## Checklist
 
-- [ ] Layer 1: WHMCS + connector installed, products synced, prices set
-- [ ] Layer 2: branded app builds published from your own developer accounts
-- [ ] Layer 3 on WHMCS 9.1+: Invoice Immutability set to *Immutability disabled (billing notes still enabled)*
-- [ ] Layer 3: [Google Play setup](https://github.com/vpnhood/VpnHood.WHMCS.Iap/blob/main/docs/IAP-GOOGLE-PLAY.md) completed for your Android app
-- [ ] Layer 3: [Apple App Store setup](https://github.com/vpnhood/VpnHood.WHMCS.Iap/blob/main/docs/IAP-APPLE-APP-STORE.md) completed for your iOS app
+- [ ] Web store: WHMCS + connector installed, products synced, prices set
+- [ ] Apps: branded app builds published from your own developer accounts
+- [ ] In-app purchases on WHMCS 9.1+: Invoice Immutability set to *Immutability disabled (billing notes still enabled)*
+- [ ] In-app purchases: [Google Play setup](https://github.com/vpnhood/VpnHood.WHMCS.Iap/blob/main/docs/IAP-GOOGLE-PLAY.md) completed for your Android app
+- [ ] In-app purchases: [Apple App Store setup](https://github.com/vpnhood/VpnHood.WHMCS.Iap/blob/main/docs/IAP-APPLE-APP-STORE.md) completed for your iOS app
 - [ ] Sandbox/internal-testing purchase verified end-to-end before going live
 
-Questions about any layer — or to get started as a white-label partner — contact
+Questions about any of this — or to get started as a white-label partner — contact
 VpnHood through your partner channel.
