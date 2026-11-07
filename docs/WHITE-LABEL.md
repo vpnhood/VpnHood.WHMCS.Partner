@@ -4,15 +4,17 @@ The partner connector is more than resale: it is the foundation for a complete
 VPN brand of your own. Your storefront, your prices, your apps, your app-store
 listings — with VpnHood invisible behind them, running the infrastructure.
 
-White label is this connector plus your own app. In-app purchases are an option
-you can add:
+White label is this connector plus your own app, with the vpnhoodiap addon for
+your customers' sign-in. In-app purchases are an option you can add:
 
 ```text
 Required  Your web store       your WHMCS + this connector      sell premium codes under your brand
 Required  Your branded apps    your builds of the open-source   your name, icon and package
                                VpnHood client                   on the stores
-Optional  In-app purchases     the vpnhoodiap addon (its own    Google Play / App Store sales
-                               release) on your WHMCS           land as orders in YOUR store
+Required  Sign-in              the vpnhoodiap addon (its own    customers sign in to your apps
+                               release) on your WHMCS           and get their premium code
+Optional  In-app purchases     the same addon, with your        Google Play / App Store sales
+                               store accounts                   land as orders in YOUR store
 ```
 
 Every sale works the same way: an order in **your WHMCS** is paid from your
@@ -42,17 +44,42 @@ What this means in practice:
   or VpnHood can do it for you as a separate service.
 - **You track upstream releases.** Your build inherits engine fixes by rebuilding
   on new VpnHood releases; the LGPL terms travel with the code.
-- **Premium codes just work.** A customer who bought on your web store enters
-  their premium code in your branded app — no extra integration needed.
+- **Customers sign in, or type their code.** A customer signs in to your app and
+  their premium code arrives on its own, whether they bought it on your web store
+  or in the app ([Sign-in in your apps](#sign-in-in-your-apps)). On Android,
+  Windows and Linux they can also type a code into the app. On iOS they can't:
+  Apple does not allow an app to be unlocked with a typed code (App Review
+  guideline 3.1.1), so the iOS build has no box for one.
 
 Talk to VpnHood before starting a branded app: the team will point you at the
 right app template and the branding surface for your case.
 
+## Sign-in in your apps
+
+Your customers sign in to your app with Google, with Apple, or with the email and
+password of their account in your store, and the app gets their premium code by
+itself. The sign-in is served by the **vpnhoodiap** addon on your WHMCS, so every
+white-label app needs the addon, even one that sells nothing inside the app. On
+iOS it is the only way in, as the App Store build takes no typed code.
+
+For sign-in alone:
+
+1. Install the **`vpnhoodiap`** package and activate the **VpnHood! IAP** addon in
+   WHMCS admin, as its [requirements](https://github.com/vpnhood/VpnHood.WHMCS.Iap#requirements)
+   describe. It is a release of its own,
+   [VpnHood.WHMCS.Iap](https://github.com/vpnhood/VpnHood.WHMCS.Iap/releases/latest),
+   extracted at your WHMCS root beside this connector, and it updates on its own
+   schedule.
+2. **Apps tab**: register every build of your app, with its package/bundle id and
+   the OAuth client ids its sign-in uses: the client ID of your Google sign-in for
+   the Google Play build, the bundle id for Sign in with Apple. A build that signs
+   in with email and password only, such as Windows, Linux or an APK from your
+   website, goes under the store `web`. A build that isn't registered cannot sign in.
+
 ## In-app purchases in your apps (optional)
 
-The **vpnhoodiap** addon is a package of its own, installed from its own release
-beside this connector (setup below). With your store and apps in place, it turns purchases
-made *inside* your branded apps into normal orders in your WHMCS:
+The same **vpnhoodiap** addon turns purchases made *inside* your branded apps into
+normal orders in your WHMCS:
 
 ```text
 customer buys in your app ─▶ Google/Apple pays YOU (you are the merchant)
@@ -66,6 +93,11 @@ Renewals, cancellations and refunds flow in through store webhooks and keep the
 service, invoices and the upstream key in sync — including revoking refunded
 purchases. App-store sales, web sales and support all live in the one WHMCS
 panel you already run.
+
+On iOS, Apple may require them. App Review guideline 3.1.3(b) lets an app give
+access to subscriptions bought elsewhere, such as on your web store, "provided
+those items are also available as in-app purchases within the app". App Review
+decides, so be ready to add them to your iOS app.
 
 ### What you need for in-app purchases
 
@@ -93,17 +125,14 @@ proves it end-to-end:
 
 In outline, both follow the same shape:
 
-1. Install the **`vpnhoodiap`** package (its own release —
-   [VpnHood.WHMCS.Iap](https://github.com/vpnhood/VpnHood.WHMCS.Iap/releases/latest),
-   extracted at your WHMCS root), then activate the **VpnHood! IAP** addon and the
+1. With the addon installed for [sign-in](#sign-in-in-your-apps), activate the
    **vpnhoodiappay** payment gateway in WHMCS admin. On WHMCS 9.1 or later, also set
    **Invoice Immutability** (General Settings → Invoices) to *Immutability disabled
    (billing notes still enabled)*: the addon corrects and cancels store invoices, which
    9.1's default refuses.
-2. **Apps tab**: register each of your store apps — package/bundle id, the OAuth
-   client ids your app's sign-in uses, and the store credentials (stored
-   encrypted, write-only). Saving generates the app's unique webhook URL; give
-   that URL to the store's notification setup.
+2. **Apps tab**: add the store credentials to each store app you registered for
+   sign-in (stored encrypted, write-only). Each app's row shows its unique webhook
+   URL; give that URL to the store's notification setup.
 3. **Catalog tab**: map each store product (and base plan) to one of your
    connector products. The mapping decides what gets provisioned — an unmapped
    store product is refused cleanly rather than guessed at.
@@ -113,16 +142,6 @@ In outline, both follow the same shape:
 Customer-facing invoice emails for app-store sales are suppressed automatically
 (the store already receipts the customer); the addon's own cron keeps entitlements
 reconciled against the stores daily.
-
-### Availability
-
-The WHMCS side is a package of its own — `vpnhoodiap` is released separately from
-the connector and installed alongside it, so you take it only if you sell in-app
-purchases, and it updates on its own schedule. On the app side, the
-store-billing integration (Google sign-in/billing, Apple sign-in/StoreKit) is
-part of the current VpnHood client rollout — coordinate with VpnHood before
-wiring your branded app for in-app purchases so your build picks up the
-integration at the right version.
 
 ## The money, in one picture
 
@@ -139,6 +158,7 @@ obligation to VpnHood is keeping the prepaid credit topped up.
 
 - [ ] Web store: WHMCS + connector installed, products synced, prices set
 - [ ] Apps: branded app builds published from your own developer accounts
+- [ ] Sign-in: vpnhoodiap installed and active, every build of your app registered in its Apps tab, and sign-in tested on each platform
 - [ ] In-app purchases on WHMCS 9.1+: Invoice Immutability set to *Immutability disabled (billing notes still enabled)*
 - [ ] In-app purchases: [Google Play setup](https://github.com/vpnhood/VpnHood.WHMCS.Iap/blob/main/docs/IAP-GOOGLE-PLAY.md) completed for your Android app
 - [ ] In-app purchases: [Apple App Store setup](https://github.com/vpnhood/VpnHood.WHMCS.Iap/blob/main/docs/IAP-APPLE-APP-STORE.md) completed for your iOS app
