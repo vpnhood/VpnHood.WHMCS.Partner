@@ -125,14 +125,14 @@ warning when they do not — so you find out here rather than when a customer's 
 
 | Event in your WHMCS | What the connector does upstream |
 |---------------------|----------------------------------|
-| Order placed / activated | `order` → provisions a key, returns the access code |
+| Order placed / activated | `order` → provisions a key, returns the premium code |
 | Renewal | `renew` → keeps the upstream key's expiry in sync |
 | Suspend | `suspend` → suspends the upstream key |
 | Unsuspend | `unsuspend` → reactivates the upstream key |
 | Terminate / Cancel | `terminate` → expires the upstream key (no credit is returned) |
 | **Refund** (admin button) | `refund` → expires the upstream key and returns its price to your VpnHood credit, inside the refund window |
 
-The delivered access code is shown to your customer in their **client area** for the
+The delivered premium code is shown to your customer in their **client area** for the
 service. Each key also carries VpnHood's own **order id** (`upstreamOrderId`, the handle
 every lifecycle call sends) and **key id** (`accessTokenId`); both are shown on the
 service's admin page under **Module Settings**. Those are the ids VpnHood recognises —

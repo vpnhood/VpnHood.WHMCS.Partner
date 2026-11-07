@@ -1,14 +1,14 @@
-<p>Your VPN access code is ready. Use it to activate VpnHood.</p>
+<p>Your VPN premium code is ready. Use it to activate VpnHood.</p>
 
 {if $accessCode}
     <div class="alert alert-success" style="font-size:1.1em;">
-        <strong>Access Code:</strong>
+        <strong>Premium Code:</strong>
         <span id="vhAccessCode">{$accessCode|escape}</span>
     </div>
     <button id="vhCopyCode" class="btn btn-default btn-sm" type="button">Copy code</button>
 {else}
     <div class="alert alert-warning">
-        Your access code is not available yet. Please check back shortly or contact support.
+        Your premium code is not available yet. Please check back shortly or contact support.
     </div>
 {/if}
 

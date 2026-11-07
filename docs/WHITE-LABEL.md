@@ -17,13 +17,13 @@ Layer 3  In-app purchases      the vpnhoodiap addon (its own    Google Play / Ap
 
 At every layer the plumbing is the same: an order in **your WHMCS** is paid from
 your **prepaid credit** with VpnHood, provisions a key upstream, and delivers the
-access code to your customer. You set retail prices; the margin is yours.
+premium code to your customer. You set retail prices; the margin is yours.
 
 ## Layer 1 — your web store
 
 This is the connector's core and is fully covered by the [README](../README.md):
 install `vpnhoodpartner.zip`, configure your API key/secret, sync or create
-products at your prices. Your customers buy on your site, receive an access code
+products at your prices. Your customers buy on your site, receive a premium code
 in their client area, and redeem it in a VpnHood-compatible client app.
 
 Everything your customer sees — the storefront, invoices, emails, support — is
@@ -43,7 +43,7 @@ What this means in practice:
 - **You track upstream releases.** Your build inherits engine fixes by rebuilding
   on new VpnHood releases; the LGPL terms travel with the code.
 - **Access codes just work.** A customer who bought on your web store (Layer 1)
-  enters their access code in your branded app — no extra integration needed.
+  enters their premium code in your branded app — no extra integration needed.
 
 Talk to VpnHood before starting a branded app: the team will point you at the
 right app template and the branding surface for your case.
@@ -59,7 +59,7 @@ customer buys in your app ─▶ Google/Apple pays YOU (you are the merchant)
         app sends proof    ─▶ vpnhoodiap on your WHMCS verifies it with the store,
                               creates the client + order + paid invoice,
         this connector     ─▶ provisions the key from your prepaid credit,
-        the app receives   ─▶ the access code — automatically, in one call
+        the app receives   ─▶ the premium code — automatically, in one call
 ```
 
 Renewals, cancellations and refunds flow in through store webhooks and keep the
