@@ -36,8 +36,9 @@ VpnHood will give you:
 1. Download **[vpnhoodpartner.zip](https://github.com/vpnhood/VpnHood.WHMCS.Partner/releases/latest/download/vpnhoodpartner.zip)**
    — always the latest release.
 2. Upload the zip to the **root of your WHMCS installation** and extract it there. It contains a
-   single `modules/` folder (`servers/vpnhoodpartner/` and `addons/vpnhoodpartnerconfig/`) that
-   merges into your existing one.
+   single `modules/` folder (`servers/vpnhoodpartner/`, `addons/vpnhoodpartnerconfig/` and the
+   update panel's `widgets/vpnhoodupdates.php`) that merges into your existing one. Your WHMCS
+   needs PHP 8.0 or later.
 3. **Delete the zip file** after extracting it.
 4. In WHMCS Admin go to **System Settings → Addon Modules** and click **Activate** on
    **VpnHood Partner Connector Configuration**.
@@ -59,13 +60,17 @@ VpnHood will give you:
    who opens a support ticket and shows it on the ticket. Tick it to keep none; the IP addresses
    already on your tickets are cleared overnight.
 
+   Under **Access Control**, tick the admin roles that may use the connector (at least
+   **Full Administrator**), then **Save Changes**. Without it the connector's page never appears
+   under **Addons**.
+
 ## Updating
 
 Download the new zip and repeat steps 1–3. Extracting over the top replaces the module files and
 leaves your settings, products and services untouched.
 
-Then open **Addons → VpnHood Partner Connector Configuration** once. WHMCS applies any upgrade
-the release needs on that page load.
+Then open **System Settings → Addon Modules** once. WHMCS records the new version, and applies
+any upgrade the release needs, only when an admin opens that page.
 
 **You will be told when an update exists.** The connector checks GitHub once a day and shows
 the result in a **VpnHood! Modules** panel on your WHMCS admin home page and on the connector's
@@ -92,8 +97,8 @@ same billing cycles the upstream product offers.
 
 ![The connector addon page listing upstream products and whether each exists in your WHMCS](docs/images/03-addon-page.png)
 
-The page also shows your **credit balance** with VpnHood and the installed version of both
-halves of the connector.
+The page also shows your **credit balance** with VpnHood and an **Installed VpnHood packages**
+table, with **Check now** to look for a newer release at once.
 
 New products are created **hidden** and priced **0.00**, because only you decide your retail
 price. For each one:
@@ -111,9 +116,13 @@ removed, so it is safe to re-run whenever VpnHood offers you something new.
    - **Module Name**: `VpnHood! Partner Connector` (`vpnhoodpartner`).
    - **Upstream Product**: pick from the dropdown — it lists exactly the products VpnHood
      mapped to your account (each label shows its available billing cycles).
+   - Choose **Automatically setup the product as soon as the first payment is received**, as
+     the sync does. Otherwise a paid order waits for you to accept it by hand, or credit is
+     spent on orders nobody has paid for.
 3. Set your own pricing on the **Pricing** tab, matching the upstream product's cycle(s).
    If you enable a billing cycle the upstream product does not offer, the Module Settings
-   tab shows a warning, and orders on that cycle are rejected at purchase time.
+   tab shows a warning, and an order on that cycle fails when it is set up, after your
+   customer has paid.
 
 ![A product's Module Settings tab: Module Name, the Upstream Product dropdown, and the compatibility check](docs/images/04-product-module-settings.png)
 
@@ -191,7 +200,8 @@ that order's key without a charge; ordering a new key buys one.
 - **"Invalid API credentials" / "suspended"** – verify your API Key/Secret and that your
   partner account is active with VpnHood.
 - **"Insufficient credit"** – top up your prepaid balance with VpnHood. Nothing was charged;
-  press Create again afterwards.
+  press Create again afterwards. If it says **"to renew"**, press **Renew** instead: Create
+  would only return the existing key, and the key would still end with its current term.
 - **"Order not found for this partner"** – the id sent as `upstreamOrderId` was not VpnHood's
   order id. Use the **VpnHood order id** shown on the service's admin page: never your own
   WHMCS service or order id, and never the number in a client-area URL — those are different
@@ -204,7 +214,9 @@ that order's key without a charge; ordering a new key buys one.
   contact VpnHood support.
 - **"an ended key cannot be suspended / unsuspended / renewed"** – the key was terminated or
   refunded upstream; sell a new key instead.
-- All errors are recorded under **Utilities → Logs → Module Log** (search `vpnhoodpartner`).
+- A failed action is recorded in WHMCS's **Activity Log**, and an automatic one also in
+  **Utilities → Module Queue**. The **Module Log** (search `vpnhoodpartner`) has each call's
+  full details, but only while module debug logging is on.
 
 ## License
 

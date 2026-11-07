@@ -40,8 +40,9 @@ service properties, and — most importantly — the **upstream Hub API contract
   **Bumping is done by CI, not locally** — see *Releasing* below. This repo versions
   **independently** of the Hub repo — the Hub API contract couples them, not the version number.
 - **No build/lint/test tooling** is configured (no PHP CLI in this environment). The only CI
-  is the release workflow, which versions and tags — it does not build or test. Verify on a
-  live WHMCS pair (partner + provider) — see `docs/DEVELOPMENT.md`.
+  is the release workflow, which versions, checks PHP syntax (`php -l`), builds the zip and
+  tags — it runs no tests. Verify on a live WHMCS pair (partner + provider) — see
+  `docs/DEVELOPMENT.md`.
 
 ## Releasing
 
@@ -71,6 +72,8 @@ releases on push. Details in `docs/DEVELOPMENT.md` → *Versioning* / *Releasing
 - Release workflow: `.github/workflows/release.yml`, launched by `_publish.ps1`
 - Module: `modules/servers/vpnhoodpartner/`
 - Hub connection settings + product-sync admin page: `modules/addons/vpnhoodpartnerconfig/`
+  (its `hooks.php` runs the daily update check and ticket IP clearing)
+- Update panel on the admin home page: `modules/widgets/vpnhoodupdates.php`
 - Hub HTTP client: `modules/servers/vpnhoodpartner/lib/HubClient.php`
 - Client-area templates: `modules/servers/vpnhoodpartner/templates/`
 - Developer guide + API contract: `docs/DEVELOPMENT.md`

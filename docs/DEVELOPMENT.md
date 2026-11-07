@@ -26,6 +26,10 @@ modules/
   addons/vpnhoodpartnerconfig/
     vpnhoodpartnerconfig.php   global Hub connection settings (URL, key, secret)
                                + the addon page: upstream product sync
+    hooks.php                  the daily update check, ticket IP clearing
+    vhcontract.json            names the module, its package and its repo for the update panel
+  widgets/
+    vpnhoodupdates.php         the admin home page's VpnHood! Modules panel
   servers/vpnhoodpartner/
     vpnhoodpartner.php         WHMCS lifecycle hooks + _ConfigOptions + _ClientArea
                                + the Module tab (order ids, reconcile)
@@ -35,6 +39,7 @@ modules/
     templates/
       clientarea.tpl           shows the delivered access code
       error.tpl
+    vhcontract.json            as above, for the provisioning module
     whmcs.json
 ```
 
@@ -43,7 +48,7 @@ modules/
 This is a **server module** (`RequiresServer => false`) paired with a companion **addon**,
 `vpnhoodpartnerconfig`, that holds the single global Hub connection — mirroring the
 `vpnhoodconfig` + MANAGER pattern in the VpnHood.WHMCS repo. The partner configures it once
-under **System Settings → Addon Modules → VpnHood! Partner Connector Configuration**; there is
+under **System Settings → Addon Modules → VpnHood Partner Connector Configuration**; there is
 no WHMCS "Server" to set up.
 
 `HubClient::fromConfig` reads the addon settings from `tbladdonmodules`:
@@ -255,7 +260,7 @@ one unit, once: `quantity` must be 1, and a repeat with a different product, cyc
 
 | `code` | HTTP | Meaning |
 |--------|------|---------|
-| `in_progress` / `initializing` | 409 | a request with this key, another action on the same account, or the Hub's first-use setup is still running — retry |
+| `in_progress` / `initializing` | 409 | a request with this key, or another action on the same account, is still running (`initializing` comes only from Hubs before 1.2.20, during their first-use setup) — retry |
 | `reconcile` | 409 | keyless live orders exist under this `customerReference`; `details.candidates[]` = `{ upstreamOrderId, product, billingCycle, status, placedAt }` |
 | `key_mismatch` | 409 | the key belongs to a different request (or `linkOrder`: to a different order) |
 | `key_spent` | 409 | the key's order is terminated or cancelled; a replacement needs a new key |
@@ -341,12 +346,12 @@ number into the zip. The tag mirrors `VERSION`; it never defines it.
 
 `vpnhoodpartnerconfig_upgrade($vars)` is the only hook that runs on an upgrade. Guard
 every migration with `version_compare($vars['version'], 'x.y.z', '<')` and make it
-idempotent — partners jump several versions at once, and a failed upgrade is re-run on
-the next admin page load. **Extracting the zip only adds and overwrites**: when a
+idempotent — partners jump several versions at once, and a failed upgrade is re-run the
+next time it is called. **Extracting the zip only adds and overwrites**: when a
 release deletes a module file, `unlink()` it there or partners keep running dead code.
 
-WHMCS calls it only on an admin page load, so until a partner's admin visits, the new code
-runs against the old data. The hub's addons call theirs from the cron instead (`AfterCronJob`
+WHMCS calls it only when an admin opens **System Settings → Addon Modules**, so until a
+partner's admin does, the new code runs against the old data. The hub's addons call theirs from the cron instead (`AfterCronJob`
 → `<module>_runPendingUpgrade()`, VpnHood.WHMCS `docs/ARCHITECTURE.md`, "Versioning &
 releases"): give this addon the same in the release that brings its first migration. Its
 `hooks.php` came in 1.2.1, and WHMCS loads it only for addons in its hook list, written at
@@ -480,7 +485,8 @@ value their install does not have.
 
 ## Conventions & testing
 
-- PHP 7.4+; no PHP toolchain/lint is configured in this environment — verify on a live WHMCS.
+- PHP 8.0+ (the update widget catches `\Throwable` without a variable); no PHP toolchain is
+  configured in this environment, and CI only checks syntax (`php -l`) — verify on a live WHMCS.
 - WHMCS module folder names: lowercase letters/numbers, no underscores/spaces.
 - End-to-end test needs a partner WHMCS + a provider WHMCS running the Hub: create a product
   mapped to an allowed `downstreamRef`, place a test order as an end customer, confirm the
