@@ -335,8 +335,9 @@ function vpnhoodpartner_CreateAccount(array $params): string
         $request = [
             'downstreamRef'     => (string) $params['configoption1'],
             // The cycle the customer chose; the Hub validates it against the upstream
-            // product and rejects an unsupported cycle (purchase-time enforcement).
-            'billingCycle'      => (string) ($params['model']->billingcycle ?? ''),
+            // product and rejects an unsupported cycle (purchase-time enforcement). Sent as
+            // AddOrder names it: WHMCS stores "Semi-Annually", which older Hubs refuse.
+            'billingCycle'      => strtolower(str_replace(['-', ' '], '', trim((string) ($params['model']->billingcycle ?? '')))),
             'quantity'          => 1,
             'customerReference' => (string) $serviceId,
             'idempotencyKey'    => vpnhoodpartner_idempotencyKey($params),
