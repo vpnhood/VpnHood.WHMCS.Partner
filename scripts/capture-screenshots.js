@@ -21,7 +21,10 @@ const { chromium } = require('playwright');
 const path = require('path');
 const fs = require('fs');
 
-const BASE = (process.env.WHMCS_URL || 'https://whmcs-dev.vpnhood.com').replace(/\/+$/, '');
+// The install to capture: capture-screenshots.ps1 passes it, as this public repo never names the
+// dev one. Its own host must not be legible in any shot (see assertClean).
+const BASE = (process.env.WHMCS_URL || '').replace(/\/+$/, '');
+const SOURCE_HOST = BASE ? new URL(BASE).hostname.toLowerCase() : '';
 const OUT = process.env.SHOT_DIR || path.join(__dirname, '..', 'docs', 'images');
 const USER = process.env.WHMCS_USER;
 const PASS = process.env.WHMCS_PASS;
@@ -104,7 +107,7 @@ async function redact(page) {
 }
 
 async function assertClean(page, selector, label) {
-  const leaked = await page.evaluate((sel) => {
+  const leaked = await page.evaluate(({ sel, host }) => {
     const el = document.querySelector(sel);
     if (!el) return ['(element missing)'];
     // Only what is VISIBLE can reach the image. Hidden inputs (CSRF tokens and such)
@@ -129,13 +132,17 @@ async function assertClean(page, selector, label) {
       ((balanceEl.textContent || '').match(/\b[\d,]+\.\d{2}(\s*[A-Z]{3})?\b/g) || [])
         .filter(m => !/^100\.00/.test(m)).forEach(m => bad.push('balance:' + m));
     }
-    if (/whmcs-dev|localhost|127\.0\.0\.1/i.test(hay)) bad.push('non-public host in frame');
+    // the capture source's own host, or its first label, and loopback
+    const lower = hay.toLowerCase();
+    if (lower.includes(host) || lower.includes(host.split('.')[0]) || /localhost|127\.0\.0\.1/i.test(hay)) {
+      bad.push('non-public host in frame');
+    }
     // Placeholder addresses that no longer exist in the module's own text. If one is
     // still in frame, the deployed build is older than the repo AND the substitution
     // above failed to catch it.
     if (/yourprovider\.com/i.test(hay)) bad.push('stale example URL in frame');
     return bad;
-  }, selector);
+  }, { sel: selector, host: SOURCE_HOST });
 
   if (leaked.length) {
     console.log(`    !! ${label}: REVIEW BEFORE COMMITTING -> ${leaked.join(', ')}`);
@@ -256,8 +263,8 @@ async function passSudo(page) {
 }
 
 (async () => {
-  if (!USER || !PASS) {
-    console.error('WHMCS_USER and WHMCS_PASS must be set — run scripts/capture-screenshots.ps1');
+  if (!BASE || !USER || !PASS) {
+    console.error('WHMCS_URL, WHMCS_USER and WHMCS_PASS must be set — run scripts/capture-screenshots.ps1');
     process.exit(1);
   }
   fs.mkdirSync(OUT, { recursive: true });

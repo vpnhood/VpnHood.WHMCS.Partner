@@ -60,12 +60,10 @@ releases on push. Details in `docs/DEVELOPMENT.md` → *Versioning* / *Releasing
 
 ## Dev server & credentials
 
-- Credentials live outside the repo: admin logins in
-  `<Vh root>\.user\account-dev.vpnhood.com\secrets.json` (the `.user/<host>/` convention), and the
-  SSH key in `<Vh root>\.user\ssh\ssh.openssh`.
-- This connector is verified on the same dev WHMCS as the Hub:
-  `ssh -i <Vh root>\.user\ssh\ssh.openssh whmcsdev@webhost-ftps.vpnhood.com`, web root
-  `/home/whmcsdev/web/whmcs-dev.vpnhood.com/public_html`, site `https://whmcs-dev.vpnhood.com`.
+- This repo is public and never names the dev WHMCS: no host, SSH user, folder or address, in
+  code, scripts or docs. They live in `<Vh root>\.user\whmcs\dev.env` (SSH login, web root, site,
+  and the secrets file holding the admin logins); the SSH key is `<Vh root>\.user\ssh\ssh.openssh`.
+- This connector is verified on the same dev WHMCS as the Hub.
 
 ## Where things are
 

@@ -442,9 +442,10 @@ regenerated with:
 ```
 
 It installs Playwright into a temp folder on first run (driving the Chrome already on
-the machine — no browser download) and reads admin credentials from
-`<Vh root>\.user\account-dev.vpnhood.com\secrets.json`, passing them through the environment so
-they never touch the repo. Re-run it whenever the admin UI these steps describe changes.
+the machine — no browser download) and reads admin credentials from the secrets file that
+`<Vh root>\.user\whmcs\dev.env` names, passing them through the environment so they never touch
+the repo. That file names the dev WHMCS too, which this public repo never does. Re-run it
+whenever the admin UI these steps describe changes.
 
 Two things the script exists to get right, because doing it by hand is where screenshots
 leak:

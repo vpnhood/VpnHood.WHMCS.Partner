@@ -43,7 +43,7 @@
 # local, passed to node through the environment, and cleared again below.
 [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingPlainTextForPassword', 'CredentialsPath')]
 param(
-    [string] $Url = 'https://whmcs-dev.vpnhood.com',
+    [string] $Url,
     [string] $CredentialsPath,
     [string] $ProductId,
     [string] $OutDir
@@ -54,12 +54,24 @@ Set-StrictMode -Version Latest
 
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 if (-not $OutDir) { $OutDir = Join-Path $RepoRoot 'docs\images' }
-if (-not $CredentialsPath) {
-    # <Vh root>\.user\account-dev.vpnhood.com\ — outside the repo, never committed. See CLAUDE.md.
-    $CredentialsPath = Join-Path (Split-Path -Parent $RepoRoot) '.user\account-dev.vpnhood.com\secrets.json'
-}
-
 function Fail([string] $Message) { Write-Host "ERROR: $Message" -ForegroundColor Red; exit 1 }
+
+# The dev install and its credentials file are named in <Vh root>\.user\whmcs\dev.env, outside
+# the repo, which is public and never names the server. See CLAUDE.md.
+$userDir = Join-Path (Split-Path -Parent $RepoRoot) '.user'
+$devEnvPath = Join-Path $userDir 'whmcs\dev.env'
+$devEnv = @{}
+if (Test-Path $devEnvPath) {
+    foreach ($line in Get-Content $devEnvPath) {
+        if ($line -match '^(WHMCS_DEV_[A-Z_]+)=(.*)$') { $devEnv[$Matches[1]] = $Matches[2] }
+    }
+}
+if (-not $Url) { $Url = $devEnv['WHMCS_DEV_URL'] }
+if (-not $CredentialsPath -and $devEnv['WHMCS_DEV_SECRETS']) {
+    $CredentialsPath = Join-Path $userDir $devEnv['WHMCS_DEV_SECRETS']
+}
+if (-not $Url) { Fail "No WHMCS to capture from. Pass -Url, or name the dev install in $devEnvPath." }
+if (-not $CredentialsPath) { Fail "No credentials file. Pass -CredentialsPath, or name it in $devEnvPath." }
 
 if (-not (Get-Command node -ErrorAction SilentlyContinue)) { Fail 'Node.js not found.' }
 if (-not (Test-Path $CredentialsPath)) {
