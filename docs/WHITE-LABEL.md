@@ -94,8 +94,8 @@ customer buys in your app ─▶ Google/Apple pays YOU (you are the merchant)
 ```
 
 Renewals, cancellations and refunds flow in through store webhooks and keep the
-service, invoices and the upstream key in sync — including revoking refunded
-purchases. App-store sales, web sales and support all live in the one WHMCS
+service, invoices and the upstream key in sync — including reversing refunded
+charges and ending the purchases a store revokes. App-store sales, web sales and support all live in the one WHMCS
 panel you already run.
 
 On iOS, Apple may require them. App Review guideline 3.1.3(b) lets an app give
