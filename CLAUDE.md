@@ -61,8 +61,8 @@ releases on push. Details in `docs/DEVELOPMENT.md` → *Versioning* / *Releasing
 ## Dev server & credentials
 
 - This repo is public and never names the dev WHMCS: no host, SSH user, folder or address, in
-  code, scripts or docs. They live in `<Vh root>\.user\whmcs\dev.env` (SSH login, web root, site,
-  and the secrets file holding the admin logins); the SSH key is `<Vh root>\.user\ssh\ssh.openssh`.
+  code, scripts or docs. They live in `<Vh root>\.user\whmcs\dev.env` (SSH login and key, web root,
+  site, and the secrets file holding the admin logins).
 - This connector is verified on the same dev WHMCS as the Hub.
 
 ## Where things are
